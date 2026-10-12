@@ -1,0 +1,23 @@
+bin/
+obj/
+dist/
+.build/
+artifacts/
+*.user
+.vs/
+.idea/
+*.suo
+*.userosscache
+*.sln.docstates
+TestResults/
+*.binlog
+*.pfx
+*.p12
+.env
+.env.*
+# Clipboard data must never enter source control, even if copied to the root.
+history.dat
+history.tmp
+settings.json
+menu-diagnostics.log
+ui-diagnostics.txt

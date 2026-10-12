@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="PasteFromHistory.csproj" />
+  <Folder Name="/tests/">
+    <Project Path="tests/PasteFromHistory.Tests.csproj" />
+  </Folder>
+</Solution>

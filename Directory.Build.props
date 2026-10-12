@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <DefaultItemExcludes>$(DefaultItemExcludes);.build\**;artifacts\**;dist\**</DefaultItemExcludes>
+  </PropertyGroup>
+  <Import Project="$(MSBuildThisFileDirectory)Version.props" />
+</Project>

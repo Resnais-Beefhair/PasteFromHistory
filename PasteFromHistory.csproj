@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>PasteFromHistory</AssemblyName>
+    <RootNamespace>PasteFromHistory</RootNamespace>
+    <Description>Local clipboard history with a right-click companion, tray browser, and quick paste</Description>
+    <RepositoryUrl>https://github.com/Resnais-Beefhair/PasteFromHistory</RepositoryUrl>
+    <Product>PasteFromHistory</Product>
+    <Authors>PasteFromHistory contributors</Authors>
+    <Copyright>Copyright (c) 2026 PasteFromHistory contributors</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PublishTrimmed>false</PublishTrimmed>
+    <ApplicationIcon Condition="Exists('Assets\PasteFromHistory.ico')">Assets\PasteFromHistory.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Remove="tests\**;dist\**;artifacts\**" />
+  </ItemGroup>
+</Project>

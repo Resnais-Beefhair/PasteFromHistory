@@ -41,6 +41,7 @@ internal static class Program
     private static void Run()
     {
         Check(new AppSettings().MenuCount == 10, "Ten recent entries by default");
+        Check(!new AppSettings().HotkeyEnabled, "Global shortcut is opt-in by default");
         var normalized = new AppSettings { HistoryLimit = -1, MenuCount = 500 };
         normalized.Normalize();
         Check(normalized.HistoryLimit == 10 && normalized.MenuCount == 10, "Settings bounds");
@@ -115,9 +116,12 @@ internal static class Program
         var rejected = false;
         try { storage.Load(); } catch (System.Security.Cryptography.CryptographicException) { rejected = true; }
         Check(rejected, "Corrupted history rejected"); File.Delete(storePath);
+        HistoryRecoveryTests.Run(Check, output);
+        PngValidationTests.Run(Check, imageBytes.ToArray());
         var settingsPath = Path.Combine(output, "test-settings.json");
-        new AppSettings { MenuCount = 17 }.Save(settingsPath);
+        new AppSettings { MenuCount = 17, HotkeyEnabled = true }.Save(settingsPath);
         Check(AppSettings.Load(settingsPath).MenuCount == 17, "Settings persist");
+        Check(AppSettings.Load(settingsPath).HotkeyEnabled, "An existing enabled shortcut preference survives updating");
         File.Delete(settingsPath);
 
         var pasteFolder = Path.Combine(output, "folder-paste-" + Guid.NewGuid().ToString("N"));

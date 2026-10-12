@@ -1,0 +1,35 @@
+name: Bug report
+description: Report a reproducible application problem in English.
+title: '[Bug] '
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use synthetic clipboard content. Do not upload personal history, settings, or private screenshots.
+        For a security vulnerability, follow SECURITY.md instead of disclosing it here.
+  - type: input
+    id: app-version
+    attributes:
+      label: PasteFromHistory version
+      description: Release version or source commit, and whether you used the ZIP or built from source.
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Windows and affected application
+      description: Windows version/build, affected application/version, and display scaling.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Include the expected result and what happened. Use invented clipboard content.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Additional context
+      description: For menu issues, say whether the tray and Ctrl+Shift+V work, and whether the target app is elevated.

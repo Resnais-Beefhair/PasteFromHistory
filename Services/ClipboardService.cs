@@ -49,8 +49,11 @@ public static class ClipboardCodec
             };
             if (png != null)
             {
+                if (!PngHeader.TryReadSize(png, out var width, out var height)
+                    || (long)width * height > History.MaxPixels) return null;
                 using var stream = new MemoryStream(png);
                 using var image = System.Drawing.Image.FromStream(stream);
+                if (image.Width != width || image.Height != height) return null;
                 entry = new() { Kind = ClipKind.Image, Png = png, Width = image.Width, Height = image.Height };
             }
             else if (data.GetData(DataFormats.Bitmap) is System.Drawing.Image image)
@@ -58,7 +61,7 @@ public static class ClipboardCodec
                 using (image)
                 using (var stream = new MemoryStream())
                 {
-                    if ((long)image.Width * image.Height > 40_000_000) return null;
+                    if ((long)image.Width * image.Height > History.MaxPixels) return null;
                     image.Save(stream, ImageFormat.Png);
                     entry = new() { Kind = ClipKind.Image, Png = stream.ToArray(), Width = image.Width, Height = image.Height };
                 }
@@ -88,6 +91,7 @@ public static class ClipboardCodec
                 data.SetData(DataFormats.UnicodeText, true, entry.Text);
                 break;
             case ClipKind.Image:
+                if (!History.IsValid(entry)) throw new InvalidDataException("The image has invalid or excessive dimensions.");
                 using (var stream = new MemoryStream(entry.Png!))
                 using (var image = System.Drawing.Image.FromStream(stream))
                     data.SetData(DataFormats.Bitmap, true, new Bitmap(image));

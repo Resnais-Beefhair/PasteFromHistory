@@ -28,7 +28,9 @@ public sealed class HistoryStorage(string filePath)
             {
                 var entries = JsonSerializer.Deserialize<ClipEntry[]>(bytes);
                 if (entries == null || entries.Any(entry => !History.IsValid(entry))
-                    || entries.Select(entry => entry.Id).Distinct().Count() != entries.Length)
+                    || entries.Select(entry => entry.Id).Distinct().Count() != entries.Length
+                    || entries.Count(entry => entry.Pinned) > History.MaxPinnedEntries
+                    || entries.Where(entry => entry.Pinned).Sum(entry => entry.Size) > History.MaxPinnedBytes)
                     throw new InvalidDataException("The history file contains invalid entries.");
                 return entries;
             }

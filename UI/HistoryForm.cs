@@ -136,7 +136,8 @@ internal sealed class HistoryForm : Form
             actions.Controls.Add(Theme.Button("Clear", () => ClearRequested?.Invoke()));
         }
         layout.Controls.Add(actions, 0, 4);
-        var tip = Theme.Label(folder != null ? "To folder: " + folder : compact ? "Enter: paste    ·    Esc: close    ·    Alt+1–9: select" : "Right-click → Paste from history    ·    Ctrl+Shift+V", Theme.Small, Theme.Muted);
+        var tip = Theme.Label(folder != null ? "To folder: " + folder : compact ? "Enter: paste    ·    Esc: close    ·    Alt+1–9: select"
+            : settings.HotkeyEnabled ? "Right-click → Paste from history    ·    Ctrl+Shift+V" : "Right-click → Paste from history", Theme.Small, Theme.Muted);
         tip.AutoSize = false; tip.Dock = DockStyle.Fill; tip.AutoEllipsis = true; tip.TextAlign = ContentAlignment.MiddleLeft;
         layout.Controls.Add(tip, 0, 5);
 
@@ -223,6 +224,7 @@ internal sealed class HistoryForm : Form
         if (thumbnails.TryGetValue(entry.Id, out var value)) return value;
         try
         {
+            if (!History.IsValid(entry)) return null;
             using var stream = new MemoryStream(entry.Png!);
             using var image = Image.FromStream(stream);
             var ratio = Math.Min(1d, 700d / Math.Max(image.Width, image.Height));

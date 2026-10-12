@@ -1,0 +1,82 @@
+name: Draft release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build draft release
+    runs-on: windows-2025
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Validate version tag
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          [xml]$versionFile = Get-Content Version.props -Raw
+          $version = [string]$versionFile.Project.PropertyGroup.Version
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw 'Version.props must contain a stable major.minor.patch version.'
+          }
+          if ($env:EVENT_NAME -eq 'push' -and $env:RELEASE_TAG -ne "v$version") {
+            throw 'The tag must be v followed by the exact version in Version.props.'
+          }
+          "APP_VERSION=$version" >> $env:GITHUB_ENV
+          "RELEASE_TAG=v$version" >> $env:GITHUB_ENV
+      - name: Build, test, and verify package
+        shell: pwsh
+        run: ./scripts/Build.ps1
+      - name: Prepare draft notes
+        shell: pwsh
+        run: |
+          $notes = @'
+          Windows x64 clipboard history, with an English interface.
+
+          Download the **win-x64.zip**, extract it, and run **PasteFromHistory.exe** or **Install.cmd**.
+          The .NET runtime is included. No administrator access is required.
+          The ZIP contains the user guide, uninstaller, and runtime license notices.
+
+          The standalone EXE is also available. Keep it at a permanent path after first launch.
+          These builds are unsigned. SHA-256 checksums are provided for the EXE and ZIP.
+
+          See CHANGELOG.md at this tag for changes and docs/USAGE.md for usage instructions.
+
+          **Maintainer review before publishing:** record the actual manual test results and
+          remaining limitations here, following docs/TESTING.md. Automated checks do not
+          establish compatibility with every application's right-click menu.
+          '@
+          $notes | Set-Content .build/release-notes.md -Encoding utf8
+      - name: Create draft with downloads
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          $name = "PasteFromHistory-$env:APP_VERSION-win-x64"
+          $assets = @("dist/$name.zip", "dist/$name.exe", "dist/$name-SHA256SUMS.txt", 'LICENSE', 'THIRD-PARTY-NOTICES.md')
+          # A manual run creates the version tag at this exact source commit.
+          # GitHub's workflow token does not recursively trigger tag workflows.
+          gh release create $env:RELEASE_TAG @assets --draft --target $env:SOURCE_COMMIT --title "PasteFromHistory $env:APP_VERSION" --notes-file .build/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed; inspect the existing release before retrying.' }

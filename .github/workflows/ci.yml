@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build and verify
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, test, and verify package
+        shell: pwsh
+        run: ./scripts/Build.ps1
+      - name: Check tests did not change source
+        shell: pwsh
+        run: |
+          git diff --exit-code
+          if ($LASTEXITCODE -ne 0) { throw 'Build or tests changed tracked source files.' }
+      - name: Upload verified downloads
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: PasteFromHistory-win-x64
+          path: |
+            dist/*.exe
+            dist/*.zip
+            dist/*-SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
+      - name: Upload synthetic UI previews
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: synthetic-ui-previews
+          path: artifacts/tests/*.png
+          if-no-files-found: ignore
+          retention-days: 7

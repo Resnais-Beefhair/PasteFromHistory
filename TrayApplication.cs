@@ -42,8 +42,19 @@ internal sealed class TrayApplication : ApplicationContext
         if (settings.SaveHistory)
         {
             try { history.Load(storage.Load(), settings.HistoryLimit); }
-            catch (Exception ex) when (ex is IOException or System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException or UnauthorizedAccessException)
-            { startupNotice = "Saved history could not be opened. New clips can still be captured."; }
+            catch (Exception ex) when (ex is IOException or InvalidDataException or System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException or UnauthorizedAccessException)
+            {
+                try
+                {
+                    var backup = storage.Quarantine();
+                    startupNotice = "Saved history could not be opened. The original was preserved at:\n" + backup + "\nNew clips will start a new history.";
+                }
+                catch (Exception preserveError) when (preserveError is IOException or UnauthorizedAccessException)
+                {
+                    startupNotice = "Saved history could not be opened or moved. Saving is disabled for this session to protect the original:\n"
+                        + Path.Combine(dataDirectory, "history.dat");
+                }
+            }
         }
         messages = new MessageWindow { Settings = () => settings };
         messages.Captured += entry => history.Add(entry, settings.HistoryLimit);

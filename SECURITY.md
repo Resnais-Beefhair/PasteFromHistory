@@ -31,6 +31,10 @@ promised response time or paid support agreement.
 - The right-click companion observes mouse events; it does not record typed keys.
 - Uninstall preserves settings and history. Clear history in the application
   first if you want to remove saved clips. No secure disk erasure is claimed.
+- Unreadable history is preserved as a `history.dat.unreadable-*` recovery file.
+  These copies retain their original bytes and are never automatically deleted
+  by clearing history, disabling saved history, or uninstalling. They may contain
+  sensitive data; keep them private and remove them manually when no longer needed.
 
 Maintainers should enable private vulnerability reporting before publishing the
 repository and follow the [release checklist](docs/RELEASING.md).

@@ -35,7 +35,7 @@ changed download but do not replace code signing.
 | --- | --- |
 | Right-click in another app | A **Paste from history** companion button appears near its menu. Choose it, then a clip to paste. |
 | Right-click a desktop or Explorer folder | An actual **Paste from history** shell command pastes into that folder. Windows 11 may put it under **Show more options**. |
-| Ctrl+Shift+V | Open recent history for the current application; optional in settings. |
+| Ctrl+Shift+V | Open recent history for the current application; opt in through Settings. |
 | Left-click the tray icon | Browse and search the full history. |
 | Right-click the tray icon | Settings, pause capture, clear history, or quit. |
 
@@ -43,11 +43,18 @@ The popup shows **10 recent clips** by default, with **100 clips** retained in t
 full history. Both limits are configurable. Capture starts with new copies after
 the app launches; it does not import the Windows Win+V database.
 
+The global shortcut is off by default in new profiles. Enabling it can override
+another application's own Ctrl+Shift+V action. Existing saved preferences are
+preserved when updating.
+
 **The companion is a separate, non-activating window.** It does not inject a menu
 item into every application's private menu implementation. Ordinary right-click
 behavior is preserved. Native Win32 and Notepad XAML menus have position
 handling; custom menus, games, fullscreen windows, and elevated applications can
 behave differently. See [compatibility testing](docs/TESTING.md).
+
+The companion uses a global mouse hook while enabled. See
+[mouse monitoring](docs/USAGE.md#mouse-monitoring) for what it observes and how to disable it.
 
 ## What is stored
 
@@ -68,6 +75,10 @@ running as the same Windows user can still access this data. Capture respects
 supported privacy markers, but applications do not always mark sensitive data.
 Pause capture when needed. See [SECURITY.md](SECURITY.md) for details.
 
+Unreadable history is preserved before new clips are saved. See
+[history recovery](docs/USAGE.md#unreadable-history) for recovery file locations
+and what happens if the original cannot be moved.
+
 Uninstall with `Uninstall.cmd`. It removes the app's integration and program files,
 but preserves history/settings. Clear history in the app first if you want to
 remove saved clips. Automatic startup is optional and off by default.
@@ -80,7 +91,17 @@ on Windows. Clone the repository, then build from its root:
 ```powershell
 git clone https://github.com/Resnais-Beefhair/PasteFromHistory.git
 cd PasteFromHistory
+```
+
+For a quick development build:
+
+```powershell
 dotnet build PasteFromHistory.slnx -c Release
+```
+
+To run the regression checks and create the complete release package:
+
+```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1
 ```
 

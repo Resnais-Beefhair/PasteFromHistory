@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>PasteFromHistory.Tests</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup><ProjectReference Include="..\PasteFromHistory.csproj" /></ItemGroup>
+</Project>

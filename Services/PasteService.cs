@@ -12,10 +12,11 @@ internal sealed record PasteTarget(nint Window, string? Folder = null, nint Focu
 
 internal static class PasteService
 {
-    public static async Task<string?> Paste(ClipEntry entry, PasteTarget target)
+    public static async Task<string?> Paste(ClipEntry entry, PasteTarget target, bool plainText = false)
     {
+        if (plainText && entry.Kind != ClipKind.Text) throw new ArgumentException("Plain-text paste requires a text clip.", nameof(entry));
         if (target.Folder != null) return await PasteToFolder(entry, target.Folder);
-        ClipboardCodec.Write(entry);
+        ClipboardCodec.Write(entry, plainText);
         if (target.Window == 0 || !Native.IsWindow(target.Window) || Native.IsOwnWindow(target.Window))
             return "Copied to the clipboard. Focus the destination and press Ctrl+V.";
 

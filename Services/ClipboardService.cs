@@ -10,6 +10,13 @@ public static class ClipboardCodec
 {
     public const string OwnFormat = Compatibility.LegacyName + ".Internal.1";
 
+    internal static ClipEntry? ReadFromSource(Func<IDataObject?> read, AppSettings settings, ClipboardSource source)
+    {
+        if (CaptureExclusions.ShouldSkip(settings.ExcludedProcesses, source.Owner, source.Foreground)) return null;
+        var data = read();
+        return data == null ? null : Read(data, settings);
+    }
+
     public static bool IsPrivate(IDataObject data)
     {
         if (data.GetDataPresent(OwnFormat, false)
@@ -79,15 +86,16 @@ public static class ClipboardCodec
         return entry != null && History.IsValid(entry) ? entry : null;
     }
 
-    public static DataObject Encode(ClipEntry entry)
+    public static DataObject Encode(ClipEntry entry, bool plainText = false)
     {
+        if (plainText && entry.Kind != ClipKind.Text) throw new ArgumentException("Plain-text paste requires a text clip.", nameof(entry));
         var data = new DataObject();
         data.SetData(OwnFormat, false, new MemoryStream([1]));
         switch (entry.Kind)
         {
             case ClipKind.Text:
-                if (entry.Html != null) data.SetData(DataFormats.Html, false, entry.Html);
-                if (entry.Rtf != null) data.SetData(DataFormats.Rtf, false, entry.Rtf);
+                if (!plainText && entry.Html != null) data.SetData(DataFormats.Html, false, entry.Html);
+                if (!plainText && entry.Rtf != null) data.SetData(DataFormats.Rtf, false, entry.Rtf);
                 data.SetData(DataFormats.UnicodeText, true, entry.Text);
                 break;
             case ClipKind.Image:
@@ -107,9 +115,9 @@ public static class ClipboardCodec
         return data;
     }
 
-    public static void Write(ClipEntry entry)
+    public static void Write(ClipEntry entry, bool plainText = false)
     {
-        var data = Encode(entry);
+        var data = Encode(entry, plainText);
         try { Clipboard.SetDataObject(data, true, 8, 50); }
         finally
         {
@@ -123,6 +131,8 @@ internal sealed class MessageWindow : Form
     private readonly System.Windows.Forms.Timer retry = new() { Interval = 90 };
     private int attempts;
     private bool registered;
+    private readonly GlobalHotkey hotkey;
+    private ClipboardSource pendingSource;
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
     public Func<AppSettings> Settings { get; set; } = () => new();
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
@@ -136,6 +146,7 @@ internal sealed class MessageWindow : Form
         FormBorderStyle = FormBorderStyle.None;
         retry.Tick += (_, _) => ReadPending();
         _ = Handle;
+        hotkey = new GlobalHotkey(Handle);
     }
 
     public void StartListening()
@@ -144,20 +155,23 @@ internal sealed class MessageWindow : Form
         if (!registered) throw new InvalidOperationException("Clipboard monitoring could not start.");
     }
 
-    public bool SetHotkey(bool enabled)
+    public bool SetHotkey(bool enabled, HotkeyGesture gesture) => hotkey.Set(enabled, gesture);
+
+    private void QueueRead()
     {
-        Native.UnregisterHotKey(Handle, 1);
-        return !enabled || Native.RegisterHotKey(Handle, 1, 0x4006, 0x56); // Ctrl + Shift + V, no repeat
+        retry.Stop(); attempts = 0;
+        if (Paused) return;
+        pendingSource = ClipboardSource.Capture();
+        retry.Start();
     }
 
     protected override void WndProc(ref Message message)
     {
         if (message.Msg == Native.WM_CLIPBOARDUPDATE)
         {
-            retry.Stop(); attempts = 0;
-            if (!Paused) retry.Start();
+            QueueRead();
         }
-        else if (message.Msg == Native.WM_HOTKEY) Hotkey?.Invoke();
+        else if (message.Msg == Native.WM_HOTKEY && hotkey.Id != 0 && message.WParam == hotkey.Id) Hotkey?.Invoke();
         base.WndProc(ref message);
     }
 
@@ -167,10 +181,12 @@ internal sealed class MessageWindow : Form
         if (Paused) return;
         try
         {
-            var sequence = Native.GetClipboardSequenceNumber();
-            var data = Clipboard.GetDataObject();
-            var entry = data == null ? null : ClipboardCodec.Read(data, Settings());
-            if (sequence != Native.GetClipboardSequenceNumber()) { retry.Start(); return; }
+            // A retry must never apply a previous clipboard owner's privacy decision
+            // to replacement contents. Re-evaluate the source before reading them.
+            var source = pendingSource;
+            if (source.Sequence != Native.GetClipboardSequenceNumber()) { QueueRead(); return; }
+            var entry = ClipboardCodec.ReadFromSource(Clipboard.GetDataObject, Settings(), source);
+            if (source.Sequence != Native.GetClipboardSequenceNumber()) { QueueRead(); return; }
             if (entry != null) Captured?.Invoke(entry);
         }
         catch (ExternalException) { if (++attempts < 8) retry.Start(); }
@@ -184,7 +200,7 @@ internal sealed class MessageWindow : Form
         {
             retry.Dispose();
             if (registered) Native.RemoveClipboardFormatListener(Handle);
-            Native.UnregisterHotKey(Handle, 1);
+            hotkey.Dispose();
         }
         base.Dispose(disposing);
     }

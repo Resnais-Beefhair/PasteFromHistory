@@ -33,13 +33,19 @@ inside the **Show hidden icons** arrow. Drag it to the visible tray if desired.
 | --- | --- |
 | Ordinary right-click in another app | A **Paste from history** companion appears beside the app's menu. Click it, then choose a clip. |
 | Right-click the desktop or an Explorer folder | **Paste from history** opens the picker for that folder. On Windows 11, it may be under **Show more options**. |
-| Ctrl+Shift+V | Open the quick picker for the current app. This shortcut is optional; conflicts are reported. |
+| Ctrl+Shift+V | Open the quick picker for the current app when enabled in Settings. Off by default in new profiles. |
 | Left-click the tray icon | Open the full history, search, and preview. |
 | Right-click the tray icon | Settings, pause/resume capture, clear history, and quit. |
 
 The quick menu shows **10 recent clips** by default. The full history holds up
 to **100 clips** by default. Both limits can be changed in Settings. Search can
 find older clips outside the ten most recent items.
+
+The shortcut is system-wide when enabled and can override another application's
+own Ctrl+Shift+V action, such as plain-text paste. Windows only reports a conflict
+when global registration fails; it does not detect every app-local binding.
+Uncheck **Open the quick menu with Ctrl+Shift+V** in Settings and click **Save**
+to release the keys. Updating preserves an existing saved shortcut preference.
 
 In the quick picker, a single click or Enter pastes the selected clip. Alt+1-9
 selects a row; Escape closes the picker. In the full history, select a row and
@@ -49,6 +55,20 @@ The companion is a separate, non-activating window. It does not inject a row
 into every app's internal menu. Normal right-click behavior is preserved.
 Custom menus, fullscreen apps, games, and apps running as administrator may
 behave differently. The shortcut and tray are alternative ways to open history.
+
+## Mouse monitoring
+
+When **Show companion on ordinary right-click** is enabled in Settings, the app
+installs a global low-level Windows mouse hook (`WH_MOUSE_LL`). It observes
+right-button presses/releases and left/middle-button presses, their positions,
+and the destination window/focus so it can place or dismiss the companion and
+restore the paste target. Mouse events continue to the original application.
+
+The hook does not record typed keys or keep a production mouse-event log.
+Turn off **Show companion on ordinary right-click** and click **Save** to remove
+the hook. Clipboard capture, the tray, the optional shortcut, and the separately
+configured Explorer command remain available. Pausing clipboard capture alone
+does not disable the companion's mouse monitoring.
 
 ## Captured content
 
@@ -85,6 +105,24 @@ capture from the tray when needed; existing clips remain usable while paused.
 Turning off saved history deletes the saved history file, while the current
 session's history stays in memory. **Clear history** removes saved clips but
 leaves the current Windows clipboard unchanged. Start with Windows is off by default.
+
+## Unreadable history
+
+If saved history cannot be read, the app first attempts to move the original to
+`history.dat.unreadable-<UTC timestamp>-<unique ID>` in the same data directory.
+The original bytes are preserved without overwriting an earlier recovery file.
+A startup notification gives the saved path, and new clips start a new history.
+
+If the original cannot be moved (for example, another program has locked it),
+the app captures new clips in memory but blocks all history-file writes and
+deletion for that session, including on exit. Those new clips will not survive
+exit. Resolve the access problem and restart the app to retry recovery.
+
+Recovery files are not automatically repaired, restored, or deleted. **Clear
+history**, disabling saved history, and uninstalling do not remove these copies.
+They can contain sensitive clipboard data; keep them private and remove them
+manually when no longer needed. Do not attach them to public issues. A changed
+Windows encryption key may prevent recovery even when the original file exists.
 
 ## Update or remove
 

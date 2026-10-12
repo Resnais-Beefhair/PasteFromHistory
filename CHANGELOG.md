@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.1.1 — Unreleased
+
+- Preserve unreadable history in a uniquely named recovery file before saving
+  new clips. If preservation fails, block disk saves and deletion for the session.
+- Treat inaccessible files and invalid decrypted history records as load failures,
+  including null records and duplicate IDs.
+- Check PNG headers and pixel limits before image decoding, including restored
+  images used for previews and pasting.
+- Make the global Ctrl+Shift+V shortcut opt-in for new profiles to avoid taking
+  over application shortcuts. Preserve existing saved preferences.
+- Document recovery files and mouse monitoring; separate development builds from
+  release packaging instructions. Record the disposition of the external audit.
+
 ## 1.1.0 — 2026-10-12
 
 - Publishable MIT-licensed source project with English contributor documentation

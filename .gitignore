@@ -16,7 +16,7 @@ TestResults/
 .env
 .env.*
 # Clipboard data must never enter source control, even if copied to the root.
-history.dat
+history.dat*
 history.tmp
 settings.json
 menu-diagnostics.log

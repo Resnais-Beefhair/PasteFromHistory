@@ -10,22 +10,56 @@ public sealed class HistoryStorage(string filePath)
     private readonly object gate = new();
     private (ClipEntry[] Entries, bool Enabled)? pending;
     private Task worker = Task.CompletedTask;
+    private bool writesBlocked;
     public event Action<string>? Failed;
 
     public ClipEntry[] Load()
     {
-        if (!File.Exists(filePath)) return [];
-        if (new FileInfo(filePath).Length > 100L * 1024 * 1024)
-            throw new InvalidDataException("The history file is too large.");
-        var bytes = ProtectedData.Unprotect(File.ReadAllBytes(filePath), Entropy, DataProtectionScope.CurrentUser);
-        try { return JsonSerializer.Deserialize<ClipEntry[]>(bytes) ?? []; }
-        finally { CryptographicOperations.ZeroMemory(bytes); }
+        try
+        {
+            // Opening directly distinguishes a missing file from an inaccessible one.
+            using var source = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (source.Length > 100L * 1024 * 1024)
+                throw new InvalidDataException("The history file is too large.");
+            var encrypted = new byte[(int)source.Length];
+            source.ReadExactly(encrypted);
+            var bytes = ProtectedData.Unprotect(encrypted, Entropy, DataProtectionScope.CurrentUser);
+            try
+            {
+                var entries = JsonSerializer.Deserialize<ClipEntry[]>(bytes);
+                if (entries == null || entries.Any(entry => !History.IsValid(entry))
+                    || entries.Select(entry => entry.Id).Distinct().Count() != entries.Length)
+                    throw new InvalidDataException("The history file contains invalid entries.");
+                return entries;
+            }
+            finally { CryptographicOperations.ZeroMemory(bytes); }
+        }
+        catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException) { return []; }
+        catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or CryptographicException or JsonException)
+        {
+            // Protect the original even if quarantine fails or the app exits immediately.
+            lock (gate) { writesBlocked = true; pending = null; }
+            throw;
+        }
+    }
+
+    public string Quarantine()
+    {
+        lock (gate)
+        {
+            if (!writesBlocked) throw new InvalidOperationException("History must fail to load before it can be preserved.");
+            var backup = filePath + ".unreadable-" + DateTime.UtcNow.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N");
+            File.Move(filePath, backup, overwrite: false);
+            writesBlocked = false;
+            return backup;
+        }
     }
 
     public void Schedule(IReadOnlyList<ClipEntry> entries, bool enabled)
     {
         lock (gate)
         {
+            if (writesBlocked) return;
             pending = (entries.ToArray(), enabled);
             if (worker.IsCompleted) worker = Task.Run(Work);
         }

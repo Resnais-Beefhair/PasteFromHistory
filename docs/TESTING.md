@@ -8,6 +8,12 @@ formats, encrypted storage, save scheduling, folder output, and popup limits.
 It renders the UI with synthetic clips into `artifacts/tests/`. These are render
 previews, not proof that all interactions work.
 
+Recovery regressions use synthetic encrypted files and locked test files. They
+also start and immediately stop isolated application contexts with the mouse
+hook, hotkey, and Explorer integration disabled. PNG regressions cover truncated
+and malformed headers, excessive dimensions, integer bounds, and mismatched saved
+metadata before decoding. No real history database is read or changed.
+
 Run `scripts/Test.ps1 -Interactive` from an unlocked desktop for native menu
 checks. They open a real Win32 menu loop three times and check that the companion
 preserves the menu, foreground window, and text focus, then check restoration

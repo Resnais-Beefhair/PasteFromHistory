@@ -1,0 +1,78 @@
+# Architecture
+
+PasteFromHistory is a Windows Forms application targeting `net10.0-windows`.
+`Program.Main` owns the STA thread, captures the original foreground window,
+chooses the data directory, and establishes a single-instance scope.
+`TrayApplication` owns the message loop and coordinates the services and forms.
+
+## Capture and storage
+
+`MessageWindow` listens to `WM_CLIPBOARDUPDATE`. A short timer retries clipboard
+access when another application holds it. `ClipboardCodec` checks privacy
+markers before decoding text, PNG/bitmap, or file-drop data. App-owned writes
+carry a private marker to prevent capture loops.
+
+`History` validates entries, deduplicates equal content, promotes recent clips,
+and applies count and byte limits. `HistoryStorage` serializes snapshots to JSON,
+encrypts them using DPAPI `CurrentUser`, and replaces the history file via a
+temporary file. Pending writes are serialized and flushed during normal exit.
+Settings are separate JSON; do not add clip content or diagnostics to settings.
+
+## Opening and pasting
+
+The tray, optional global shortcut, and shell verbs open `HistoryForm`.
+`MouseObserver` uses a low-level mouse hook to observe ordinary right-clicks and
+record the original target and focused control before a menu can move focus.
+The hook passes events on. A timer shows `MenuCompanion` after the native menu opens.
+
+The companion is a separate no-activate window. Native extended styles keep it
+above the menu without WinForms' managed `TopMost` visibility path activating
+it. Do not replace this with `Form.TopMost = true`: that previously closed
+Notepad's menu. `Native.FindMenu` recognizes Win32 and relevant XAML popup classes;
+other applications use placement near the click.
+
+Choosing a clip closes the picker, restores the original application's focus,
+writes the formats to the clipboard, and uses `SendInput` for Ctrl+V. Focus
+restoration validates the window/control relationship and only temporarily
+attaches input threads. Clipboard contents remain available for manual paste if
+automatic paste is blocked. Folder targets instead create text/image files or
+invoke Windows file copy operations.
+
+## Windows integration and lifetime
+
+`SystemIntegration` writes only current-user registry entries: four Explorer
+shell verbs and an optional Run value. It uses `Environment.ProcessPath`, which
+works with the self-contained single-file release. No DLL is injected into other
+processes and the app does not require elevation.
+
+`SingleInstance` uses a local mutex and a current-user named pipe scoped by user,
+session, and optional test directory. Secondary launches send a small request to
+the active instance, including `--quit` for orderly shutdown before updates.
+
+`--test-data <absolute path>` gives development instances their own history,
+settings, and instance scope. It skips persistent Explorer/startup integration,
+but still observes live clipboard and mouse events. Test profiles are private.
+
+The public name is PasteFromHistory. `Core/Compatibility.cs` deliberately retains
+the original local build's storage directory, DPAPI entropy, clipboard marker,
+IPC prefix, and registry identity. Keep these compatible when changing branding;
+the regression suite includes an original-format encrypted history fixture.
+
+## Useful starting points
+
+| Change | Start here |
+| --- | --- |
+| History ordering, capacity, deduplication | `Core/History.cs`, `tests/Program.cs` |
+| Clipboard formats and privacy | `Services/ClipboardService.cs` |
+| Right-click compatibility | `Services/MouseObserver.cs`, `UI/MenuCompanion.cs`, `Services/Native.cs` |
+| Paste focus or folder output | `Services/PasteService.cs`, `tests/MenuCompanionTests.cs` |
+| Tray, launch behavior, settings application | `TrayApplication.cs` |
+| Packaging and runtime updates | `Version.props`, `scripts/Build.ps1` |
+
+## API references
+
+- [Clipboard change notifications](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-addclipboardformatlistener)
+- [Clipboard privacy formats](https://learn.microsoft.com/en-us/windows/win32/dataxchg/clipboard-formats#cloud-clipboard-and-clipboard-history-formats)
+- [SendInput and privilege restrictions](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendinput)
+- [Shell context-menu commands](https://learn.microsoft.com/en-us/windows/win32/shell/context-menu-handlers)
+- [.NET single-file deployment](https://learn.microsoft.com/en-us/dotnet/core/deploying/single-file/overview)

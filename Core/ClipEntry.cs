@@ -11,6 +11,7 @@ public sealed record ClipEntry
     public Guid Id { get; init; } = Guid.NewGuid();
     public ClipKind Kind { get; init; }
     public DateTimeOffset CapturedAt { get; init; } = DateTimeOffset.Now;
+    public bool Pinned { get; init; }
     public string Text { get; init; } = "";
     public string? Html { get; init; }
     public string? Rtf { get; init; }

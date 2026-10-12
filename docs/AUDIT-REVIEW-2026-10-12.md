@@ -4,7 +4,11 @@ The 21 proposals in `PasteFromHistory-issues.md` were checked against the
 published 1.1.0 source and the repository settings. Proposed implementations
 were treated as suggestions, not as a requirement to add every feature.
 
-## Changes for 1.1.1
+## Audit fixes (shipped in 1.2.0)
+
+These fixes were prepared as 1.1.1, which was not published separately. The
+original assessment below records the audit's scope. After that review, the
+maintainer requested five feature proposals for 1.2.0; see the follow-up below.
 
 - Preserve unreadable history before any new save, including the save on exit.
   If preservation fails, block both writes and deletion for that session. Reject
@@ -61,6 +65,27 @@ exercise bad signatures, short or malformed IHDR chunks, zero/out-of-range
 dimensions, excessive pixel counts, arithmetic bounds, and forged saved metadata.
 Existing clipboard, storage, folder-paste, UI-rendering, and native-menu tests
 remain in place. All fixtures are synthetic and use isolated test directories.
+
+## 1.2.0 feature follow-up
+
+The maintainer subsequently approved proposals **02, 03, 04, 16, and 17**:
+
+- **02: process exclusions** now check both clipboard owner and foreground process
+  before reading content. Unknown sources are skipped when rules are configured;
+  helper/browser limitations and future-copy scope are documented.
+- **03: configurable shortcut** adds validated keys and modifiers. Replacement
+  registration happens before releasing the old keys; conflicts retain the old
+  binding. New profiles still default to the shortcut being disabled.
+- **04: optional age expiration** defaults off and applies to unpinned clips.
+  Duplicate capture refreshes age; sweeps persist deletions across restart.
+- **16: pins** have a 50-entry / 16 MiB budget within the 48 MiB total and survive
+  automatic eviction. Explicit delete/clear still removes pins.
+- **17: plain-text paste** strips HTML/RTF for one paste without changing the saved
+  clip. The button and Shift gestures are documented, with normal image/file behavior.
+
+All five are implemented in 1.2.0. The remaining deferred proposals retain their
+original disposition. See [1.2.0 validation](TESTING.md#120-local-release-validation)
+for the expanded 138 base / 35 interactive checks and remaining coverage gaps.
 
 ## Technical references
 

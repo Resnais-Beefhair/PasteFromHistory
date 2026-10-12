@@ -23,6 +23,12 @@ promised response time or paid support agreement.
   user. Another process running as that user can access it; this is not a password vault.
 - Capture honors supported clipboard privacy markers. Applications that do not
   set them can place sensitive material into history. Pause capture when needed.
+- Optional process exclusions check clipboard owner and foreground app before
+  reading content. Unknown sources are skipped when a non-empty list is active.
+  Names are exact matches, not verified publisher identities; helpers, browser
+  extensions, and renamed programs may use other names. Rules do not erase old clips.
+- Optional age expiration applies to unpinned active history, including persisted
+  snapshots. Pins and recovery copies are exempt; this is not secure disk erasure.
 - Copied file entries store paths, not file contents. HTML/RTF are preserved for
   pasting; the application does not display them in an embedded browser.
 - The app runs as the current user, without elevation, injected DLLs, network
@@ -33,7 +39,7 @@ promised response time or paid support agreement.
   first if you want to remove saved clips. No secure disk erasure is claimed.
 - Unreadable history is preserved as a `history.dat.unreadable-*` recovery file.
   These copies retain their original bytes and are never automatically deleted
-  by clearing history, disabling saved history, or uninstalling. They may contain
+  by expiration, clearing history, disabling saved history, or uninstalling. They may contain
   sensitive data; keep them private and remove them manually when no longer needed.
 
 Maintainers should enable private vulnerability reporting before publishing the

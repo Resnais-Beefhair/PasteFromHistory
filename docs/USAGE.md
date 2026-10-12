@@ -33,28 +33,64 @@ inside the **Show hidden icons** arrow. Drag it to the visible tray if desired.
 | --- | --- |
 | Ordinary right-click in another app | A **Paste from history** companion appears beside the app's menu. Click it, then choose a clip. |
 | Right-click the desktop or an Explorer folder | **Paste from history** opens the picker for that folder. On Windows 11, it may be under **Show more options**. |
-| Ctrl+Shift+V | Open the quick picker for the current app when enabled in Settings. Off by default in new profiles. |
+| Configurable global shortcut | Open the quick picker for the current app. Enable in **Settings > Access**; initially Ctrl+Shift+V and off in new profiles. |
 | Left-click the tray icon | Open the full history, search, and preview. |
 | Right-click the tray icon | Settings, pause/resume capture, clear history, and quit. |
 
-The quick menu shows **10 recent clips** by default. The full history holds up
-to **100 clips** by default. Both limits can be changed in Settings. Search can
-find older clips outside the ten most recent items.
+The quick menu shows **10 clips** by default: pins first, then recent copies.
+Pins count toward this display limit. The full history holds up to **100 unpinned
+clips**, plus up to 50 pins. Both recent-history limits can be changed in Settings.
+Search can find older clips outside the ten visible items.
 
 The shortcut is system-wide when enabled and can override another application's
-own Ctrl+Shift+V action, such as plain-text paste. Windows only reports a conflict
+own action, such as plain-text paste. Windows only reports a conflict
 when global registration fails; it does not detect every app-local binding.
-Uncheck **Open the quick menu with Ctrl+Shift+V** in Settings and click **Save**
-to release the keys. Updating preserves an existing saved shortcut preference.
+In **Settings > Access**, choose Ctrl and/or Alt, optionally Shift, and a letter,
+digit, or function key. F12 and Windows-key combinations are reserved and are not
+offered. If registration fails, the dialog stays open and the previous shortcut
+keeps working. Uncheck **Enable global shortcut** and click **Save** to release
+the keys. Updating preserves an existing saved shortcut preference.
 
 In the quick picker, a single click or Enter pastes the selected clip. Alt+1-9
 selects a row; Escape closes the picker. In the full history, select a row and
 click **Paste**, or double-click it. **Copy** only restores it to the clipboard.
 
+For text without formatting, use **Paste as text** or **Shift+Enter**. You can
+also hold Shift while clicking a quick-picker row, double-clicking a full-history
+row, or clicking **Paste**. Unicode text is preserved; HTML and RTF are omitted
+from this paste. The stored formatted version remains available for normal paste.
+The plain-text button is disabled for images and file references; Shift gestures
+on those clips keep their normal behavior. **Copy** always preserves formats.
+
 The companion is a separate, non-activating window. It does not inject a row
 into every app's internal menu. Normal right-click behavior is preserved.
 Custom menus, fullscreen apps, games, and apps running as administrator may
 behave differently. The shortcut and tray are alternative ways to open history.
+
+## Pinned clips and expiration
+
+Select a clip and click **Pin** in full history, or press **Ctrl+P** in either
+history window. Repeat to unpin. The **Pinned** filter shows only saved snippets.
+Pins appear first, newest copied first within each group. Recopying identical
+content preserves its pin and refreshes its timestamp; differently formatted
+text is a separate clip.
+
+Pins survive count, size, and age eviction. You can pin up to **50 clips / 16 MiB**,
+within the **48 MiB** total history budget. A pin request exceeding either limit
+leaves the clip unchanged and asks you to unpin something first. **Delete** and
+**Clear history** also remove pinned clips.
+
+In **Settings > History**, set **Expire unpinned clips after (days)** to 1–3650,
+or **0** to disable age expiration (the default). Saving applies the policy
+immediately. Age runs from the latest capture time; recopying restarts it, while
+pasting or copying from this app does not. Unpinning restores count and age
+limits immediately and can remove an old clip at once.
+
+Expiration runs at startup, once a minute while running, when history is opened
+or a clip is chosen, and at exit. Expired clips are removed from the saved active
+history too. Pausing capture does not pause expiration. Recovery copies and
+external backups are not deleted by expiration. Clock changes can affect age;
+future-dated clips are kept until their timestamp ages past the limit.
 
 ## Mouse monitoring
 
@@ -80,7 +116,7 @@ does not disable the companion's mouse monitoring.
 
 Capture starts with new copies after launch. It does not import Windows Win+V
 history. Each clip is limited to 8 MiB, images to 40 million pixels, and all
-history content to 48 MiB. Old clips are removed when the count or size limit is
+history content to 48 MiB. Old unpinned clips are removed when the count or size limit is
 reached. App-specific clipboard objects are not all supported.
 
 Pasting into a folder creates a new UTF-8 TXT file for text or PNG file for an
@@ -105,6 +141,32 @@ capture from the tray when needed; existing clips remain usable while paused.
 Turning off saved history deletes the saved history file, while the current
 session's history stays in memory. **Clear history** removes saved clips but
 leaves the current Windows clipboard unchanged. Start with Windows is off by default.
+
+Settings screenshots with synthetic examples:
+[History](https://github.com/Resnais-Beefhair/PasteFromHistory/blob/v1.2.0/docs/images/settings.png),
+[Access](https://github.com/Resnais-Beefhair/PasteFromHistory/blob/v1.2.0/docs/images/settings-access.png),
+[Privacy](https://github.com/Resnais-Beefhair/PasteFromHistory/blob/v1.2.0/docs/images/settings-privacy.png).
+
+### Exclude applications
+
+Open **Settings > Privacy** and enter executable names, one per line, for example
+`KeePass.exe`, `KeePassXC.exe`, or `1Password.exe`. Task Manager's **Details** tab
+shows executable names. Matching is exact and case-insensitive; `.exe` is optional.
+Paths and wildcards are not accepted. Up to 100 names are supported.
+
+The app checks both the clipboard owner and the foreground application when a
+copy notification arrives. If either matches, contents are not read. With a
+non-empty list, a missing/unidentifiable owner or foreground process also skips
+the copy. An empty list retains normal capture, including ownerless copies.
+The clipboard sequence is rechecked around reads so a retry does not apply an
+older source decision to replacement contents. Malformed saved exclusion lists
+block capture until corrected in Settings.
+
+Rules apply to future copies; remove any previously captured sensitive clips
+yourself. Excluding a browser affects all its sites. Helpers and extensions can
+copy under a different process name; process names are not a security identity.
+Exclusions supplement supported privacy markers and pause capture. They cannot
+identify every password or secret. Source process names are not stored per clip.
 
 ## Unreadable history
 

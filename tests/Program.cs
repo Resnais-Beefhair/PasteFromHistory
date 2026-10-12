@@ -26,12 +26,13 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length == 2 && args[0] == "--paste-target") { FeatureInteractionTests.RunTarget(args[1]); return 0; }
         if (args.Contains("--ui")) { Application.Run(new TestHost()); return 0; }
         output = Path.GetFullPath(args.FirstOrDefault(arg => !arg.StartsWith("--")) ?? "artifacts");
         Directory.CreateDirectory(output);
         try
         {
-            if (args.Contains("--menu-regression")) MenuCompanionTests.Run(Check);
+            if (args.Contains("--menu-regression")) { MenuCompanionTests.Run(Check); FeatureInteractionTests.Run(Check, output); }
             else Run();
             Console.WriteLine($"\n{checks} checks passed."); return 0;
         }
@@ -118,6 +119,7 @@ internal static class Program
         Check(rejected, "Corrupted history rejected"); File.Delete(storePath);
         HistoryRecoveryTests.Run(Check, output);
         PngValidationTests.Run(Check, imageBytes.ToArray());
+        FeatureTests.Run(Check, output);
         var settingsPath = Path.Combine(output, "test-settings.json");
         new AppSettings { MenuCount = 17, HotkeyEnabled = true }.Save(settingsPath);
         Check(AppSettings.Load(settingsPath).MenuCount == 17, "Settings persist");
@@ -159,7 +161,7 @@ internal static class Program
             search.Text = "great day";
             Check(rows.Items.Count == 1, "Popup search includes older history");
         }
-        using (var settingsForm = new SettingsForm(new())) Render(settingsForm, "settings.png");
+        FeatureTests.RunUi(Check, Render);
         using (var emptyForm = new HistoryForm(new(), new(), false)) Render(emptyForm, "empty-history.png");
         using var icon = Theme.CreateIcon(); using var iconFile = File.Create(Path.Combine(output, "PasteFromHistory.ico")); icon.Save(iconFile);
         Check(true, "UI previews and application icon rendered");

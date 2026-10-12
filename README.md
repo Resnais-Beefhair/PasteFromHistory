@@ -23,6 +23,9 @@ administrator access is required. The ZIP also includes the user guide,
 uninstaller, and license notices. GitHub's automatic **Source code** downloads
 are for developers and do not contain the EXE.
 
+For a direct download, the release also provides a standalone
+`PasteFromHistory-<version>-win-x64.exe` with the runtime included.
+
 The target is Windows 11 x64. Windows 10 22H2 may work, but is not part of the
 current manual validation. ARM64 and x86 downloads are not provided. The UI is
 in English. Builds are unsigned, so Windows may display an unknown
@@ -35,17 +38,25 @@ changed download but do not replace code signing.
 | --- | --- |
 | Right-click in another app | A **Paste from history** companion button appears near its menu. Choose it, then a clip to paste. |
 | Right-click a desktop or Explorer folder | An actual **Paste from history** shell command pastes into that folder. Windows 11 may put it under **Show more options**. |
-| Ctrl+Shift+V | Open recent history for the current application; opt in through Settings. |
+| Configurable global shortcut | Open history for the current app; enable and choose keys in **Settings > Access**. Default combination: Ctrl+Shift+V. |
+| Paste as text / Shift+Enter | Paste a text clip without HTML/RTF formatting. |
+| Pin / Ctrl+P | Keep a clip and show it first; use **Pinned** to browse saved snippets. |
 | Left-click the tray icon | Browse and search the full history. |
 | Right-click the tray icon | Settings, pause capture, clear history, or quit. |
 
-The popup shows **10 recent clips** by default, with **100 clips** retained in the
-full history. Both limits are configurable. Capture starts with new copies after
+The popup shows **10 clips** by default, pinned first and then recent copies. The
+full history retains **100 unpinned clips** by default, plus up to 50 pins. Both
+recent-history limits are configurable. Capture starts with new copies after
 the app launches; it does not import the Windows Win+V database.
 
 The global shortcut is off by default in new profiles. Enabling it can override
 another application's own Ctrl+Shift+V action. Existing saved preferences are
 preserved when updating.
+
+In **Settings > Privacy**, exclude apps by executable name, such as `KeePass.exe`.
+In **Settings > History**, optionally expire unpinned clips after a number of
+days. Expiration is off by default. See the [user guide](docs/USAGE.md) for the
+exact capture, pinning, and retention rules.
 
 **The companion is a separate, non-activating window.** It does not inject a menu
 item into every application's private menu implementation. Ordinary right-click
@@ -65,7 +76,8 @@ The companion uses a global mouse hook while enabled. See
 
 Explorer pastes create a new TXT or PNG file, or copy files using Windows shell
 copy dialogs. Same-named text and image files are not overwritten. Each clip is
-limited to 8 MiB and total content to 48 MiB; older clips are evicted as needed.
+limited to 8 MiB and total content to 48 MiB; older unpinned clips are evicted as
+needed. Pinned content has its own 16 MiB limit inside that total.
 Application-specific clipboard formats are not all preserved.
 
 History is encrypted with current-user Windows DPAPI in

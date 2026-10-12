@@ -1,6 +1,26 @@
 # Changelog
 
-## 1.1.1 — Unreleased
+## 1.2.0 — 2026-10-12
+
+- Customize the optional global shortcut in Settings > Access. Failed shortcut
+  changes keep the previous registration working. New profiles leave it off.
+- Paste without HTML/RTF using **Paste as text**, Shift+Enter, Shift+click in the
+  quick picker, or Shift+double-click in full history. Normal paste keeps formatting.
+- Pin clips with **Pin** or Ctrl+P and browse the **Pinned** filter. Pins appear
+  first, survive automatic eviction, and are preserved when content is recopied.
+  Up to 50 pins / 16 MiB fit within the existing 48 MiB total budget.
+- Exclude executable names from capture in Settings > Privacy. Both clipboard
+  owner and foreground app are checked before reading content; unknown sources
+  are skipped when exclusions are configured. Existing clips remain unchanged.
+- Optionally expire unpinned clips after a number of days (off by default).
+  Recopying refreshes age; pasting does not. Expiration is applied on startup,
+  during use, after settings changes, and on exit, and deletions are persisted.
+- Organize settings into History, Access, and Privacy tabs. Preserve compatible
+  settings and encrypted history from 1.1; older clips begin unpinned.
+- Expand regression coverage for feature interactions, native shortcut conflicts,
+  capture exclusions, and plain/formatted paste into a separate rich-text process.
+
+Includes the following audit fixes, previously prepared for an unreleased 1.1.1:
 
 - Preserve unreadable history in a uniquely named recovery file before saving
   new clips. If preservation fails, block disk saves and deletion for the session.

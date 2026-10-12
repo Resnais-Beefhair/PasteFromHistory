@@ -16,6 +16,7 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly MenuCompanion companion = new();
     private readonly System.Windows.Forms.Timer rightClickDelay = new() { Interval = 220 };
     private readonly System.Windows.Forms.Timer foregroundTimer = new() { Interval = 250 };
+    private readonly System.Windows.Forms.Timer retentionTimer = new() { Interval = 60_000 };
     private readonly NotifyIcon tray;
     private readonly Icon icon;
     private readonly ToolStripMenuItem pauseItem;
@@ -41,7 +42,7 @@ internal sealed class TrayApplication : ApplicationContext
         storage = new HistoryStorage(Path.Combine(dataDirectory, "history.dat"));
         if (settings.SaveHistory)
         {
-            try { history.Load(storage.Load(), settings.HistoryLimit); }
+            try { history.Load(storage.Load(), settings.HistoryLimit, settings.RetentionDays); }
             catch (Exception ex) when (ex is IOException or InvalidDataException or System.Security.Cryptography.CryptographicException or System.Text.Json.JsonException or UnauthorizedAccessException)
             {
                 try
@@ -57,8 +58,12 @@ internal sealed class TrayApplication : ApplicationContext
             }
         }
         messages = new MessageWindow { Settings = () => settings };
-        messages.Captured += entry => history.Add(entry, settings.HistoryLimit);
-        messages.Hotkey += () => { Trace("hotkey received"); ShowPopup(new PasteTarget(Native.Root(Native.GetForegroundWindow())), Cursor.Position); };
+        messages.Captured += entry => history.Add(entry, settings.HistoryLimit, settings.RetentionDays);
+        messages.Hotkey += () =>
+        {
+            if (settingsWindow is { IsDisposed: false, Visible: true }) return;
+            Trace("hotkey received"); ShowPopup(PasteTarget.Capture(Native.Root(Native.GetForegroundWindow())), Cursor.Position);
+        };
         history.Changed += () => { storage.Schedule(history.Entries, settings.SaveHistory); UpdateTrayText(); };
         storage.Failed += message => Dispatch(() => Notify(message));
 
@@ -107,8 +112,12 @@ internal sealed class TrayApplication : ApplicationContext
         };
         foregroundTimer.Tick += (_, _) => RememberForeground();
         foregroundTimer.Start();
+        retentionTimer.Tick += (_, _) => PruneHistory();
+        retentionTimer.Start();
         messages.StartListening();
-        ApplySettings(settings, initial: true);
+        if (ApplySettings(settings, initial: true) is { } failure) startupNotice = (startupNotice == null ? "" : startupNotice + "\n") + failure;
+        if (!CaptureExclusions.TryNormalize(settings.ExcludedProcesses, out _, out _))
+            startupNotice = (startupNotice == null ? "" : startupNotice + "\n") + "Capture is blocked because the excluded application list is invalid. Correct it in Settings > Privacy.";
         UpdateTrayText();
         instance.Listen(incoming => Dispatch(() => Handle(incoming)));
         Dispatch(() =>
@@ -172,11 +181,12 @@ internal sealed class TrayApplication : ApplicationContext
         Trace("show popup requested");
         Trace("target focus before popup: " + Native.ClassName(Native.FocusedWindow(target.Window)));
         if (pasting) return;
+        PruneHistory();
         companion.Hide(); rightClickDelay.Stop(); popup?.Close();
         var form = new HistoryForm(history, settings, true, target.Folder);
         if (testMode) form.ShowInTaskbar = true;
         popup = form;
-        form.Chosen += (entry, paste) => Choose(form, entry, target, paste);
+        form.Chosen += (entry, paste, plainText) => Choose(form, entry, target, paste, plainText);
         form.FullHistoryRequested += () => { form.Close(); ShowHistory(target); };
         form.ClearRequested += ClearHistory;
         var work = Screen.FromPoint(location).WorkingArea;
@@ -189,26 +199,29 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void ShowHistory(PasteTarget target)
     {
+        PruneHistory();
         companion.Hide(); popup?.Close();
         if (fullHistory is { IsDisposed: false }) { fullHistory.Close(); }
         var form = new HistoryForm(history, settings, false, target.Folder);
         fullHistory = form;
-        form.Chosen += (entry, paste) => Choose(form, entry, target, paste);
+        form.Chosen += (entry, paste, plainText) => Choose(form, entry, target, paste, plainText);
         form.SettingsRequested += ShowSettings;
         form.ClearRequested += ClearHistory;
         form.Show(); form.Activate();
     }
 
-    private async void Choose(HistoryForm form, ClipEntry entry, PasteTarget target, bool shouldPaste)
+    private async void Choose(HistoryForm form, ClipEntry entry, PasteTarget target, bool shouldPaste, bool plainText)
     {
         Trace("entry chosen: paste=" + shouldPaste + ", target-own=" + Native.IsOwnWindow(target.Window));
         if (pasting) return;
+        PruneHistory();
+        if (!history.Entries.Any(current => current.Id == entry.Id)) { Notify("The clip has expired or was removed from history."); return; }
         pasting = true;
         try
         {
             if (!shouldPaste) { ClipboardCodec.Write(entry); Notify("Copied to the clipboard."); return; }
             form.Close();
-            var result = await PasteService.Paste(entry, target);
+            var result = await PasteService.Paste(entry, target, plainText);
             Trace("paste completed: success=" + (result == null) + ", foreground=" + Native.ClassName(Native.GetForegroundWindow())
                 + ", target focus=" + Native.ClassName(Native.FocusedWindow(target.Window)));
             if (result != null) Notify(result);
@@ -223,19 +236,25 @@ internal sealed class TrayApplication : ApplicationContext
     {
         companion.Hide(); popup?.Close();
         if (settingsWindow is { IsDisposed: false }) { settingsWindow.Activate(); return; }
-        using var form = new SettingsForm(settings);
+        using var form = new SettingsForm(settings, value => ApplySettings(value, initial: false));
         settingsWindow = form;
         if (form.ShowDialog(fullHistory is { IsDisposed: false } ? fullHistory : null) == DialogResult.OK)
         {
-            ApplySettings(form.Result, initial: false);
             if (fullHistory is { IsDisposed: false }) ShowHistory(new PasteTarget(lastTarget));
         }
         settingsWindow = null;
     }
 
-    private void ApplySettings(AppSettings value, bool initial)
+    private string? ApplySettings(AppSettings value, bool initial)
     {
         value.Normalize();
+        if (!messages.SetHotkey(value.HotkeyEnabled, value.Shortcut))
+        {
+            var failure = $"{value.Shortcut} could not be registered. Choose a different shortcut in Settings > Access.";
+            if (!initial) return failure + " Your settings were not changed.";
+            startupNotice = (startupNotice == null ? "" : startupNotice + "\n") + failure;
+            value = value with { HotkeyEnabled = false };
+        }
         try
         {
             if (!testMode)
@@ -244,21 +263,22 @@ internal sealed class TrayApplication : ApplicationContext
                 SystemIntegration.SetStartup(value.StartWithWindows);
             }
             mouse.SetEnabled(value.CompanionMenu);
-            var registeredHotkey = messages.SetHotkey(value.HotkeyEnabled);
-            Trace("hotkey registration=" + registeredHotkey);
-            if (!registeredHotkey)
-                Notify("Ctrl+Shift+V is in use by another app. You can still use the right-click companion and tray icon.");
             value.SetupComplete = true;
             value.Save(settingsPath);
             settings = value;
-            history.Trim(settings.HistoryLimit);
-            if (!initial) storage.Schedule(history.Entries, settings.SaveHistory);
+            PruneHistory();
+            // Also persist startup expiration so an old saved clip cannot reappear.
+            storage.Schedule(history.Entries, settings.SaveHistory);
+            return null;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException or System.ComponentModel.Win32Exception)
         {
-            Notify("Some settings could not be applied. " + ex.Message);
+            messages.SetHotkey(settings.HotkeyEnabled, settings.Shortcut);
+            return "Some settings could not be applied. " + ex.Message;
         }
     }
+
+    internal void PruneHistory(DateTimeOffset? now = null) => history.Trim(settings.HistoryLimit, settings.RetentionDays, now);
 
     private void TogglePause()
     {
@@ -275,7 +295,7 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void ClearHistory()
     {
-        if (MessageBox.Show("Clear all clipboard history? The current Windows clipboard will stay unchanged.",
+        if (MessageBox.Show("Clear all clipboard history, including pinned clips? The current Windows clipboard will stay unchanged.",
             "PasteFromHistory", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes) history.Clear();
     }
 
@@ -290,7 +310,8 @@ internal sealed class TrayApplication : ApplicationContext
         if (exiting) return;
         if (pasting) { Notify("Wait for the file copy to finish, or cancel the copy first."); return; }
         exiting = true;
-        mouse.Dispose(); rightClickDelay.Dispose(); foregroundTimer.Dispose();
+        PruneHistory();
+        mouse.Dispose(); rightClickDelay.Dispose(); foregroundTimer.Dispose(); retentionTimer.Dispose();
         companion.Dispose(); popup?.Dispose(); fullHistory?.Dispose(); settingsWindow?.Dispose();
         tray.Visible = false; tray.ContextMenuStrip?.Dispose(); tray.Dispose(); icon.Dispose();
         storage.Schedule(history.Entries, settings.SaveHistory); storage.Flush();

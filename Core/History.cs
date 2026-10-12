@@ -4,6 +4,7 @@ public sealed class History
 {
     public const long MaxEntryBytes = 8L * 1024 * 1024;
     public const long MaxTotalBytes = 48L * 1024 * 1024;
+    public const long MaxPixels = 40_000_000;
     private readonly List<ClipEntry> entries = [];
     private readonly Dictionary<Guid, string> fingerprints = [];
     public IReadOnlyList<ClipEntry> Entries => entries;
@@ -52,15 +53,15 @@ public sealed class History
 
     public void Clear() { entries.Clear(); fingerprints.Clear(); Changed?.Invoke(); }
 
-    public static bool IsValid(ClipEntry entry)
+    public static bool IsValid(ClipEntry? entry)
     {
-        if (entry.Text == null || entry.Paths == null || entry.Paths.Any(p => p == null)) return false;
+        if (entry == null || entry.Text == null || entry.Paths == null || entry.Paths.Any(p => p == null)) return false;
         if (entry.Size > MaxEntryBytes || entry.Id == Guid.Empty) return false;
         return entry.Kind switch
         {
             ClipKind.Text => !string.IsNullOrEmpty(entry.Text),
-            ClipKind.Image => entry.Png is { Length: > 0 } && entry.Width > 0 && entry.Height > 0
-                && (long)entry.Width * entry.Height <= 40_000_000,
+            ClipKind.Image => entry.Png != null && PngHeader.TryReadSize(entry.Png, out var width, out var height)
+                && width == entry.Width && height == entry.Height && (long)width * height <= MaxPixels,
             ClipKind.Files => entry.Paths.Length is > 0 and <= 1024 && entry.Paths.All(Path.IsPathFullyQualified),
             _ => false
         };

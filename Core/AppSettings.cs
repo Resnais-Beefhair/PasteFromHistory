@@ -11,7 +11,7 @@ public sealed record AppSettings
     public bool CaptureFiles { get; set; } = true;
     public bool CompanionMenu { get; set; } = true;
     public bool ExplorerMenu { get; set; } = true;
-    public bool HotkeyEnabled { get; set; } = true;
+    public bool HotkeyEnabled { get; set; }
     public bool StartWithWindows { get; set; }
     public bool SetupComplete { get; set; }
 

@@ -32,7 +32,7 @@ These are maintainer steps. Preparing the repository locally does not publish it
 2. Install the latest stable .NET 10 SDK. `global.json` accepts newer .NET 10
    feature bands, and CI uses `10.0.x`. Self-contained releases must be rebuilt
    for runtime security updates; changing the user's system .NET is insufficient.
-3. Run the full build and the interactive menu checks:
+3. Run the full build and the interactive menu, shortcut, capture, and paste checks:
 
    ```powershell
    powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Build.ps1
@@ -48,8 +48,8 @@ These are maintainer steps. Preparing the repository locally does not publish it
 6. Commit the change, wait for CI, and push an annotated tag:
 
    ```powershell
-   git tag -a v1.1.0 -m "PasteFromHistory 1.1.0"
-   git push origin v1.1.0
+   git tag -a v1.2.0 -m "PasteFromHistory 1.2.0"
+   git push origin v1.2.0
    ```
 
 The tag workflow validates the tag against `Version.props`, builds from the tagged

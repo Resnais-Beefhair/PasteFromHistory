@@ -10,6 +10,7 @@ internal sealed class MouseObserver : IDisposable
     private PasteTarget? rightDownTarget;
     private readonly Control dispatcher;
     public event Action<Point, PasteTarget>? RightClick;
+    public event Action<Point, PasteTarget>? RightButtonDown;
     public event Action<Point>? ButtonDown;
 
     public MouseObserver(Control dispatcher) { this.dispatcher = dispatcher; callback = OnMouse; }
@@ -37,9 +38,18 @@ internal sealed class MouseObserver : IDisposable
                 // Observing those events is safe: this application never injects mouse events.
                 {
                     var point = new Point(info.Point.X, info.Point.Y);
-                    var root = Native.Root(Native.WindowFromPoint(info.Point));
+                    var hit = Native.WindowFromPoint(info.Point);
+                    var root = Native.Root(hit);
                     // Capture focus before the destination app gives it to its menu.
-                    if (message == Native.WM_RBUTTONDOWN) rightDownTarget = PasteTarget.Capture(root);
+                    if (message == Native.WM_RBUTTONDOWN)
+                    {
+                        var saved = PasteTarget.Capture(root);
+                        // An unfocused native edit can be right-clicked while another
+                        // field owns focus. Do not later restore that unrelated field.
+                        if (saved.Focus == 0 || !Native.GetWindowRect(saved.Focus, out var rect) || !rect.Bounds.Contains(point))
+                            saved = saved with { Focus = hit != root ? hit : 0 };
+                        rightDownTarget = saved;
+                    }
                     var destination = rightDownTarget ?? new PasteTarget(root);
                     if (message == Native.WM_RBUTTONUP)
                     {
@@ -50,7 +60,11 @@ internal sealed class MouseObserver : IDisposable
                         dispatcher.BeginInvoke(() =>
                         {
                             if (message == Native.WM_RBUTTONUP) RightClick?.Invoke(point, destination);
-                            else ButtonDown?.Invoke(point);
+                            else
+                            {
+                                ButtonDown?.Invoke(point);
+                                if (message == Native.WM_RBUTTONDOWN) RightButtonDown?.Invoke(point, destination);
+                            }
                         });
                     }
                     catch (InvalidOperationException) { }

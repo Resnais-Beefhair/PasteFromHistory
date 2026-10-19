@@ -36,7 +36,7 @@ changed download but do not replace code signing.
 
 | Action | Result |
 | --- | --- |
-| Right-click in another app | A **Paste from history** companion button appears near its menu. Choose it, then a clip to paste. |
+| Right-click an editable text field | A **Paste from history** companion button appears near the pointer. Choose it, then a clip to paste. |
 | Right-click a desktop or Explorer folder | An actual **Paste from history** shell command pastes into that folder. Windows 11 may put it under **Show more options**. |
 | Configurable global shortcut | Open history for the current app; enable and choose keys in **Settings > Access**. Default combination: Ctrl+Shift+V. |
 | Paste as text / Shift+Enter | Paste a text clip without HTML/RTF formatting. |
@@ -60,9 +60,12 @@ exact capture, pinning, and retention rules.
 
 **The companion is a separate, non-activating window.** It does not inject a menu
 item into every application's private menu implementation. Ordinary right-click
-behavior is preserved. Native Win32 and Notepad XAML menus have position
-handling; custom menus, games, fullscreen windows, and elevated applications can
-behave differently. See [compatibility testing](docs/TESTING.md).
+behavior is preserved. It appears only when Windows UI Automation identifies the
+clicked control as enabled and writable. Read-only fields, ordinary page content,
+and game/drawing surfaces do not qualify. Editors that do not expose suitable
+accessibility metadata may not show it; the tray and optional shortcut remain
+available. The button stays close to the pointer and avoids recognized Win32/XAML
+menus. See [compatibility testing](docs/TESTING.md).
 
 The companion uses a global mouse hook while enabled. See
 [mouse monitoring](docs/USAGE.md#mouse-monitoring) for what it observes and how to disable it.

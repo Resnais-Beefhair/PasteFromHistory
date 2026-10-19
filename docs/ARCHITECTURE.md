@@ -43,13 +43,27 @@ prevent queued messages from the previous binding opening a popup after a change
 `HotkeyGesture` shares supported keys and labels between settings and tests.
 `MouseObserver` uses a low-level mouse hook to observe ordinary right-clicks and
 record the original target and focused control before a menu can move focus.
-The hook passes events on. A timer shows `MenuCompanion` after the native menu opens.
+The hook passes events on. On mouse-down, `EditableTargetProbe` checks the clicked
+UI Automation element on an MTA worker. Only enabled, focusable Edit/Document
+controls with explicit writable metadata qualify; read-only flags veto the result.
+Text runs may be walked up to their editor, but buttons and other controls may not.
+The probe never reads text/value contents, never falls back to a different focused
+field, and allows at most one provider call in flight. A 600 ms deadline fails
+closed without blocking input or creating a backlog if a provider hangs.
+
+A timer waits for the native menu to open and for a successful probe before showing
+`MenuCompanion`. A new click, right-button drag, settings/history action, closed
+observed menu, or changed foreground invalidates the request. No UI Automation
+objects cross threads. See Microsoft's [UI Automation threading guidance](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading).
 
 The companion is a separate no-activate window. Native extended styles keep it
 above the menu without WinForms' managed `TopMost` visibility path activating
 it. Do not replace this with `Form.TopMost = true`: that previously closed
 Notepad's menu. `Native.FindMenu` recognizes Win32 and relevant XAML popup classes;
-other applications use placement near the click.
+`CompanionPlacement` chooses a nearby position that avoids a recognized menu and
+clamps to the current monitor's work area. Unknown menus use a small gap above the
+click instead of a fixed horizontal offset. The hidden window first moves to the
+target monitor so its current DPI is applied before placement.
 
 Choosing a clip closes the picker, restores the original application's focus,
 writes the formats to the clipboard, and uses `SendInput` for Ctrl+V. Focus

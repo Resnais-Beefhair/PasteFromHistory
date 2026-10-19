@@ -14,6 +14,7 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly MessageWindow messages;
     private readonly MouseObserver mouse;
     private readonly MenuCompanion companion = new();
+    private readonly EditableTargetProbe editableTarget = new();
     private readonly System.Windows.Forms.Timer rightClickDelay = new() { Interval = 220 };
     private readonly System.Windows.Forms.Timer foregroundTimer = new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer retentionTimer = new() { Interval = 60_000 };
@@ -24,7 +25,9 @@ internal sealed class TrayApplication : ApplicationContext
     private HistoryForm? popup;
     private SettingsForm? settingsWindow;
     private nint lastTarget;
-    private (Point Point, PasteTarget Target)? pendingClick;
+    private sealed record EditorClick(Point Point, PasteTarget Target, Task<bool> Editable);
+    private EditorClick? rightDownClick, pendingClick;
+    private long clickGeneration;
     private bool exiting;
     private bool pasting;
     private string? startupNotice;
@@ -81,24 +84,34 @@ internal sealed class TrayApplication : ApplicationContext
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowHistory(new PasteTarget(lastTarget)); };
 
         mouse = new MouseObserver(messages);
+        mouse.RightButtonDown += (point, target) =>
+        {
+            if (CanOfferCompanion(target))
+                rightDownClick = new(point, target, editableTarget.CheckAsync(point, target.Window));
+        };
         mouse.RightClick += OnRightClick;
         mouse.ButtonDown += point =>
         {
             Trace("mouse down");
             if (!companion.Visible || !companion.Bounds.Contains(point)) companion.Hide();
-            rightClickDelay.Stop(); pendingClick = null;
+            CancelPendingClick();
         };
-        rightClickDelay.Tick += (_, _) =>
+        rightClickDelay.Tick += async (_, _) =>
         {
             rightClickDelay.Stop();
-            Trace("right-click timer: " + (pendingClick != null) + ", foreground " + Native.ClassName(Native.GetForegroundWindow()));
-            if (pendingClick is { } pending && settings.CompanionMenu
-                && Native.Root(Native.GetForegroundWindow()) == Native.Root(pending.Target.Window))
+            var pending = pendingClick;
+            pendingClick = null;
+            if (pending == null) return;
+            var generation = clickGeneration;
+            var menu = Native.FindMenu(pending.Target.Window, pending.Point);
+            if (await pending.Editable && !exiting && generation == clickGeneration && CanOfferCompanion(pending.Target)
+                && Native.Root(Native.GetForegroundWindow()) == Native.Root(pending.Target.Window)
+                && (menu == null || Native.IsWindowVisible(menu.Value.Handle))
+                && (Native.GetAsyncKeyState(Native.VK_ESCAPE) & 0x8000) == 0)
             {
                 companion.ShowBeside(pending.Point, pending.Target);
                 Trace("companion shown: visible=" + companion.Visible + ", native=" + Native.IsWindowVisible(companion.Handle) + ", bounds=" + companion.Bounds);
             }
-            pendingClick = null;
         };
         companion.OpenHistory += async (target, point) =>
         {
@@ -144,15 +157,31 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void OnRightClick(Point point, PasteTarget target)
     {
-        var window = target.Window;
-        Trace("right-click received: " + Native.ClassName(window) + ", own=" + Native.IsOwnWindow(window));
-        if (!settings.CompanionMenu || window == 0 || Native.IsOwnWindow(window) || popup is { IsDisposed: false, Visible: true }) return;
-        var className = Native.ClassName(window);
-        if (className is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "NotifyIconOverflowWindow" or "TopLevelWindowForOverflowXamlIsland" or "#32768") return;
-        // The desktop already has a real shell verb; normal applications get a companion.
-        if (settings.ExplorerMenu && className is "Progman" or "WorkerW") return;
-        pendingClick = (point, target);
+        var down = rightDownClick;
+        rightDownClick = null;
+        if (down == null || down.Target.Window != target.Window || !CanOfferCompanion(target)) return;
+        // A right-button drag is not a request for the editor's context menu.
+        var drag = SystemInformation.DragSize;
+        if (Math.Abs(point.X - down.Point.X) > drag.Width || Math.Abs(point.Y - down.Point.Y) > drag.Height) return;
+        pendingClick = down with { Point = point };
         rightClickDelay.Stop(); rightClickDelay.Start();
+    }
+
+    private void CancelPendingClick()
+    {
+        clickGeneration++;
+        rightClickDelay.Stop(); pendingClick = null; rightDownClick = null;
+    }
+
+    private bool CanOfferCompanion(PasteTarget target)
+    {
+        var window = target.Window;
+        if (exiting || !settings.CompanionMenu || window == 0 || Native.IsOwnWindow(window)
+            || popup is { IsDisposed: false, Visible: true }) return false;
+        var className = Native.ClassName(window);
+        if (className is "Shell_TrayWnd" or "Shell_SecondaryTrayWnd" or "NotifyIconOverflowWindow" or "TopLevelWindowForOverflowXamlIsland" or "#32768") return false;
+        // The desktop already has a real shell verb; normal applications get a companion.
+        return !(settings.ExplorerMenu && className is "Progman" or "WorkerW");
     }
 
     private void Trace(string message)
@@ -182,7 +211,7 @@ internal sealed class TrayApplication : ApplicationContext
         Trace("target focus before popup: " + Native.ClassName(Native.FocusedWindow(target.Window)));
         if (pasting) return;
         PruneHistory();
-        companion.Hide(); rightClickDelay.Stop(); popup?.Close();
+        CancelPendingClick(); companion.Hide(); popup?.Close();
         var form = new HistoryForm(history, settings, true, target.Folder);
         if (testMode) form.ShowInTaskbar = true;
         popup = form;
@@ -199,6 +228,7 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void ShowHistory(PasteTarget target)
     {
+        CancelPendingClick();
         PruneHistory();
         companion.Hide(); popup?.Close();
         if (fullHistory is { IsDisposed: false }) { fullHistory.Close(); }
@@ -234,6 +264,7 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void ShowSettings()
     {
+        CancelPendingClick();
         companion.Hide(); popup?.Close();
         if (settingsWindow is { IsDisposed: false }) { settingsWindow.Activate(); return; }
         using var form = new SettingsForm(settings, value => ApplySettings(value, initial: false));
@@ -247,6 +278,7 @@ internal sealed class TrayApplication : ApplicationContext
 
     private string? ApplySettings(AppSettings value, bool initial)
     {
+        CancelPendingClick(); companion.Hide();
         value.Normalize();
         if (!messages.SetHotkey(value.HotkeyEnabled, value.Shortcut))
         {

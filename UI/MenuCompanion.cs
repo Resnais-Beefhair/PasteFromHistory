@@ -64,15 +64,11 @@ internal sealed class MenuCompanion : Form
         var menu = Native.FindMenu(window, click);
         nativeMenu = menu?.Handle ?? 0;
         var work = Screen.FromPoint(click).WorkingArea;
-        var x = menu?.Bounds.Left ?? (click.X + 280);
-        var y = menu?.Bounds.Bottom + 5 ?? (click.Y + 6);
-        if (y + Height > work.Bottom && menu != null)
-        {
-            x = menu.Value.Bounds.Right + 5; y = menu.Value.Bounds.Top;
-            if (x + Width > work.Right) x = menu.Value.Bounds.Left - Width - 5;
-        }
-        Location = new Point(Math.Clamp(x, work.Left, Math.Max(work.Left, work.Right - Width)),
-            Math.Clamp(y, work.Top, Math.Max(work.Top, work.Bottom - Height)));
+        // Move the hidden handle onto the target monitor first, so WinForms applies
+        // its DPI before calculating the final bounds. Screen coordinates are pixels.
+        _ = Handle;
+        Location = click;
+        Location = CompanionPlacement.Locate(click, Size, work, menu?.Bounds, Math.Max(1, DeviceDpi * 6 / 96));
         shownAt = DateTime.UtcNow;
         hovering = false;
         // A foreign owner would couple our input queue/lifetime to another app.

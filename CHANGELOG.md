@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.2.1 — 2026-10-19
+
+- Show the right-click companion only over recognized writable text editors.
+  Skip read-only/disabled fields, static content, buttons, and game-like surfaces.
+  Check accessibility metadata on a bounded background worker without reading
+  field contents or delaying the mouse hook. Custom editors without suitable
+  metadata can still use the tray or optional shortcut.
+- Replace the 280-pixel horizontal fallback with placement near the pointer,
+  avoiding recognized menus and staying inside the monitor's work area.
+- Preserve the clicked native field when a different field previously had focus.
+  Cancel delayed offers when another click or an app action supersedes them.
+- Display the version number in the Settings window title.
+- Add editability, unavailable-provider, timeout, placement, and native-field
+  regressions. Record the actual local compatibility checks in docs/TESTING.md.
+
 ## 1.2.0 — 2026-10-12
 
 - Customize the optional global shortcut in Settings > Access. Failed shortcut

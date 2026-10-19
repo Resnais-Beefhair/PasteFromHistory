@@ -32,7 +32,7 @@ internal static class Program
         Directory.CreateDirectory(output);
         try
         {
-            if (args.Contains("--menu-regression")) { MenuCompanionTests.Run(Check); FeatureInteractionTests.Run(Check, output); }
+            if (args.Contains("--menu-regression")) { MenuCompanionTests.Run(Check); EditorTargetTests.RunInteractive(Check); FeatureInteractionTests.Run(Check, output); }
             else Run();
             Console.WriteLine($"\n{checks} checks passed."); return 0;
         }
@@ -41,6 +41,7 @@ internal static class Program
 
     private static void Run()
     {
+        EditorTargetTests.Run(Check);
         Check(new AppSettings().MenuCount == 10, "Ten recent entries by default");
         Check(!new AppSettings().HotkeyEnabled, "Global shortcut is opt-in by default");
         var normalized = new AppSettings { HistoryLimit = -1, MenuCount = 500 };

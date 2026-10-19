@@ -2,7 +2,7 @@
 
 PasteFromHistory keeps copied text, images, and file references close at hand.
 It runs in the Windows system tray and offers a **Paste from history** companion
-beside other applications' right-click menus.
+near the pointer when you right-click a recognized editable text field.
 
 ## Download and install
 
@@ -31,7 +31,7 @@ inside the **Show hidden icons** arrow. Drag it to the visible tray if desired.
 
 | Action | What happens |
 | --- | --- |
-| Ordinary right-click in another app | A **Paste from history** companion appears beside the app's menu. Click it, then choose a clip. |
+| Ordinary right-click in an editable text field | A **Paste from history** companion appears near the pointer. Click it, then choose a clip. |
 | Right-click the desktop or an Explorer folder | **Paste from history** opens the picker for that folder. On Windows 11, it may be under **Show more options**. |
 | Configurable global shortcut | Open the quick picker for the current app. Enable in **Settings > Access**; initially Ctrl+Shift+V and off in new profiles. |
 | Left-click the tray icon | Open the full history, search, and preview. |
@@ -64,8 +64,14 @@ on those clips keep their normal behavior. **Copy** always preserves formats.
 
 The companion is a separate, non-activating window. It does not inject a row
 into every app's internal menu. Normal right-click behavior is preserved.
-Custom menus, fullscreen apps, games, and apps running as administrator may
-behave differently. The shortcut and tray are alternative ways to open history.
+Only enabled, writable text fields identified by Windows UI Automation qualify.
+Read-only fields, static page text, and game/drawing surfaces do not show it.
+Unknown or unresponsive controls are skipped. Some custom editors and elevated
+apps do not expose the required accessibility metadata; the shortcut and tray
+remain available. Recognized native menus are kept clear of the companion.
+
+The version number appears in the Settings window title. You can also inspect
+the EXE's Properties > Details > Product version.
 
 ## Pinned clips and expiration
 
@@ -99,6 +105,11 @@ installs a global low-level Windows mouse hook (`WH_MOUSE_LL`). It observes
 right-button presses/releases and left/middle-button presses, their positions,
 and the destination window/focus so it can place or dismiss the companion and
 restore the paste target. Mouse events continue to the original application.
+
+On right-button down, a background check reads accessibility metadata at the
+clicked point: control type, bounds, enabled/focusable state, and read-only flags.
+It does not read the field's text or value, or change focus. The check is bounded
+and fails closed if the provider is unavailable; it never waits inside the hook.
 
 The hook does not record typed keys or keep a production mouse-event log.
 Turn off **Show companion on ordinary right-click** and click **Save** to remove

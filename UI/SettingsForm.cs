@@ -22,7 +22,7 @@ internal sealed class SettingsForm : Form
     {
         original = settings; Result = settings with { }; this.apply = apply;
         Theme.Style(this);
-        Text = "PasteFromHistory settings"; ClientSize = new Size(700, 680);
+        Text = $"PasteFromHistory {Application.ProductVersion.Split('+')[0]} settings"; ClientSize = new Size(700, 680);
         MinimumSize = new Size(620, 560); StartPosition = FormStartPosition.CenterParent;
         MaximizeBox = false; MinimizeBox = false; Padding = new Padding(24);
 
@@ -94,7 +94,7 @@ internal sealed class SettingsForm : Form
         var accessPage = Page("Access");
         Section(accessPage, "RIGHT-CLICK");
         companion = Check(accessPage, "Show companion on ordinary right-click", settings.CompanionMenu);
-        Help(accessPage, "The button appears beside the app's menu. Placement can vary\nbetween apps. The original menu stays available.");
+        Help(accessPage, "Shown near the pointer only in recognized editable text fields.\nRead-only fields and unrecognized surfaces do not show it.\nThe original menu stays available.");
         explorer = Check(accessPage, "Add a desktop and Explorer context-menu command", settings.ExplorerMenu);
         Section(accessPage, "KEYBOARD SHORTCUT");
         hotkey = Check(accessPage, "Enable global shortcut", settings.HotkeyEnabled);

@@ -14,7 +14,12 @@ public static class ClipboardCodec
     {
         if (CaptureExclusions.ShouldSkip(settings.ExcludedProcesses, source.Owner, source.Foreground)) return null;
         var data = read();
-        return data == null ? null : Read(data, settings);
+        var entry = data == null ? null : Read(data, settings);
+        if (entry == null || !settings.RememberSourceApp || string.IsNullOrWhiteSpace(source.Owner)) return entry;
+        // Store only the process name already obtained for capture exclusions.
+        // Foreground titles, document names and browser URLs are never requested.
+        var attributed = entry with { SourceApp = source.Owner };
+        return History.IsValid(attributed) ? attributed : entry;
     }
 
     public static bool IsPrivate(IDataObject data)

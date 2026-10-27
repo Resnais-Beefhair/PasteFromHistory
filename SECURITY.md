@@ -27,14 +27,30 @@ promised response time or paid support agreement.
   reading content. Unknown sources are skipped when a non-empty list is active.
   Names are exact matches, not verified publisher identities; helpers, browser
   extensions, and renamed programs may use other names. Rules do not erase old clips.
+- Source-app recording is separately opt-in and saves only the clipboard owner's
+  executable name with the encrypted history. It does not collect window titles,
+  document names, or website addresses as source metadata. Turning it off keeps
+  existing labels. Names and collections supplied by the user are also stored in
+  the encrypted history and share its retention and trust boundaries.
 - Optional age expiration applies to unpinned active history, including persisted
   snapshots. Pins and recovery copies are exempt; this is not secure disk erasure.
 - Copied file entries store paths, not file contents. HTML/RTF are preserved for
   pasting; the application does not display them in an embedded browser.
-- The app runs as the current user, without elevation, injected DLLs, network
-  requests, telemetry, or a cloud service. Windows privilege boundaries can
-  prevent pasting into elevated applications.
+- Text transformations run locally and preserve the saved original. HTML
+  conversion does not execute scripts or fetch linked resources. URL cleaning
+  preserves recognized signing/token parameters; arbitrary custom signature
+  schemes cannot all be detected. Review transformed text and links before pasting.
+- The app runs as the current user, without elevation or injected DLLs. Windows
+  privilege boundaries can prevent pasting into elevated applications.
+- There is no telemetry, cloud sync, or background update check. Clicking
+  **Settings > About > Check for updates** contacts a fixed GitHub API endpoint
+  for release metadata. It sends an application User-Agent but no clipboard
+  contents, source names, or settings; GitHub receives normal connection metadata
+  such as the request's IP address. Opening the release page is a separate user
+  choice. The app does not automatically download or install executables.
 - The right-click companion observes mouse events; it does not record typed keys.
+  It skips fields marked as passwords by UI Automation. This depends on metadata
+  supplied by the destination app and does not identify all sensitive fields.
 - Uninstall preserves settings and history. Clear history in the application
   first if you want to remove saved clips. No secure disk erasure is claimed.
 - Unreadable history is preserved as a `history.dat.unreadable-*` recovery file.

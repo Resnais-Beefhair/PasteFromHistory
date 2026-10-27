@@ -68,6 +68,15 @@ internal static class FeatureInteractionTests
             check(WaitUntil(() => normal.IsCompleted) && normal.GetAwaiter().GetResult() == null
                 && WaitUntil(() => ReadResult(result) is { Text: "A bold sample", Bold: true }), "Normal paste still restores RTF formatting in the other process");
 
+            SendMessage(target.Focus, 0x000C, 0, "");
+            check(WaitUntil(() => ReadResult(result)?.Text == ""), "Rich-text fixture resets before transformed paste");
+            var transformed = entry with { Text = TextTransforms.Apply(entry.Text, entry.Html, TextTransformKind.Uppercase), Html = null, Rtf = null };
+            var transformedPaste = PasteService.Paste(transformed, target, plainText: true);
+            check(WaitUntil(() => transformedPaste.IsCompleted) && transformedPaste.GetAwaiter().GetResult() == null
+                && WaitUntil(() => ReadResult(result) is { Text: "A BOLD SAMPLE", Bold: false })
+                && entry.Text == "A bold sample" && entry.Rtf != null,
+                "Transformed text reaches another process while the stored original keeps its contents and formatting");
+
             using var capture = new MessageWindow();
             var processName = Process.GetCurrentProcess().ProcessName;
             capture.Settings = () => new AppSettings { ExcludedProcesses = [processName] };

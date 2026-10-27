@@ -10,6 +10,7 @@ public sealed record AppSettings
     public bool SaveHistory { get; set; } = true;
     public bool CaptureImages { get; set; } = true;
     public bool CaptureFiles { get; set; } = true;
+    public bool RememberSourceApp { get; set; }
     public bool CompanionMenu { get; set; } = true;
     public bool ExplorerMenu { get; set; } = true;
     public bool HotkeyEnabled { get; set; }

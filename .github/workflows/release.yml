@@ -76,7 +76,14 @@ jobs:
         run: |
           $name = "PasteFromHistory-$env:APP_VERSION-win-x64"
           $assets = @("dist/$name.zip", "dist/$name.exe", "dist/$name-SHA256SUMS.txt", 'LICENSE', 'THIRD-PARTY-NOTICES.md')
-          # A manual run creates the version tag at this exact source commit.
-          # GitHub's workflow token does not recursively trigger tag workflows.
-          gh release create $env:RELEASE_TAG @assets --draft --target $env:SOURCE_COMMIT --title "PasteFromHistory $env:APP_VERSION" --notes-file .build/release-notes.md
+          # Create the tag before the draft: publishing a draft with a missing tag
+          # through the browser otherwise triggers this workflow a second time.
+          gh api "repos/$env:GH_REPO/git/ref/tags/$env:RELEASE_TAG" --silent 2>$null
+          if ($LASTEXITCODE -ne 0) {
+            gh api "repos/$env:GH_REPO/git/refs" --method POST -f "ref=refs/tags/$env:RELEASE_TAG" -f "sha=$env:SOURCE_COMMIT" --silent
+            if ($LASTEXITCODE -ne 0) { throw 'Could not create the release tag.' }
+          }
+          $tagCommit = gh api "repos/$env:GH_REPO/commits/$env:RELEASE_TAG" --jq .sha
+          if ($LASTEXITCODE -ne 0 -or $tagCommit -ne $env:SOURCE_COMMIT) { throw 'Release tag must resolve to this exact source commit.' }
+          gh release create $env:RELEASE_TAG @assets --draft --verify-tag --title "PasteFromHistory $env:APP_VERSION" --notes-file .build/release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Draft release creation failed; inspect the existing release before retrying.' }

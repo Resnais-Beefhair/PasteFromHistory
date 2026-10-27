@@ -40,20 +40,32 @@ changed download but do not replace code signing.
 | Right-click a desktop or Explorer folder | An actual **Paste from history** shell command pastes into that folder. Windows 11 may put it under **Show more options**. |
 | Configurable global shortcut | Open history for the current app; enable and choose keys in **Settings > Access**. Default combination: Ctrl+Shift+V. |
 | Paste as text / Shift+Enter | Paste a text clip without HTML/RTF formatting. |
-| Pin / Ctrl+P | Keep a clip and show it first; use **Pinned** to browse saved snippets. |
+| Pin / Ctrl+P | Keep a clip in **Favorites** without changing the order of **Recent**. |
+| Rename / F2 | Give a clip a searchable name and collection. |
+| Transform | Preview and edit text, clean whitespace, join wrapped lines, change case, convert HTML to Markdown, or remove known URL tracking parameters. |
 | Left-click the tray icon | Browse and search the full history. |
 | Right-click the tray icon | Settings, pause capture, clear history, or quit. |
 
-The popup shows **10 clips** by default, pinned first and then recent copies. The
-full history retains **100 unpinned clips** by default, plus up to 50 pins. Both
-recent-history limits are configurable. Capture starts with new copies after
-the app launches; it does not import the Windows Win+V database.
+The popup opens in **Recent**, showing the **10 latest copies** by default.
+Pinned clips stay in their chronological position; **Favorites** shows them
+separately. The full history retains **100 unpinned clips** by default, plus up to
+50 pins. Both recent-history limits are configurable. Capture starts with new
+copies after launch; it does not import the Windows Win+V database.
+
+Search accepts words in any order and tolerates small spelling errors in words.
+The full browser combines content-type, date, source-app, and collection filters.
+Names and collections organize clips; pin a clip to protect it from automatic
+expiration. Transformations run locally, show an editable preview, and preserve
+the saved original. See the [user guide](docs/USAGE.md) for limits and shortcuts.
 
 The global shortcut is off by default in new profiles. Enabling it can override
 another application's own Ctrl+Shift+V action. Existing saved preferences are
 preserved when updating.
 
 In **Settings > Privacy**, exclude apps by executable name, such as `KeePass.exe`.
+The optional **Remember the source app for new clips** setting records the
+clipboard owner's executable name for search; it is off by default. It does not
+collect window titles or website addresses, and turning it off keeps old labels.
 In **Settings > History**, optionally expire unpinned clips after a number of
 days. Expiration is off by default. See the [user guide](docs/USAGE.md) for the
 exact capture, pinning, and retention rules.
@@ -61,9 +73,9 @@ exact capture, pinning, and retention rules.
 **The companion is a separate, non-activating window.** It does not inject a menu
 item into every application's private menu implementation. Ordinary right-click
 behavior is preserved. It appears only when Windows UI Automation identifies the
-clicked control as enabled and writable. Read-only fields, ordinary page content,
-and game/drawing surfaces do not qualify. Editors that do not expose suitable
-accessibility metadata may not show it; the tray and optional shortcut remain
+clicked control as enabled and writable. Read-only and password fields, ordinary
+page content, and game/drawing surfaces do not qualify. Editors that do not expose
+suitable accessibility metadata may not show it; the tray and optional shortcut remain
 available. The button stays close to the pointer and avoids recognized Win32/XAML
 menus. See [compatibility testing](docs/TESTING.md).
 
@@ -76,6 +88,7 @@ The companion uses a global mouse hook while enabled. See
 - Images as PNG, with bitmap compatibility when pasted.
 - Copied file and folder paths. Original files must still exist; their contents
   are not backed up in history. Pasting from history copies, rather than repeats a cut.
+- User-assigned names and collections, plus source executable names when enabled.
 
 Explorer pastes create a new TXT or PNG file, or copy files using Windows shell
 copy dialogs. Same-named text and image files are not overwritten. Each clip is
@@ -97,6 +110,11 @@ and what happens if the original cannot be moved.
 Uninstall with `Uninstall.cmd`. It removes the app's integration and program files,
 but preserves history/settings. Clear history in the app first if you want to
 remove saved clips. Automatic startup is optional and off by default.
+
+**Settings > About > Check for updates** contacts GitHub only when clicked.
+It sends no clipboard contents, source names, or settings. If a newer stable
+release exists, you can open its release page and install it manually. There are
+no background update checks or automatic downloads/installations.
 
 ## Build from source
 

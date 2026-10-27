@@ -48,8 +48,8 @@ These are maintainer steps. Preparing the repository locally does not publish it
 6. Commit the change, wait for CI, and push an annotated tag:
 
    ```powershell
-   git tag -a v1.2.0 -m "PasteFromHistory 1.2.0"
-   git push origin v1.2.0
+   git tag -a v1.3.0 -m "PasteFromHistory 1.3.0"
+   git push origin v1.3.0
    ```
 
 The tag workflow validates the tag against `Version.props`, builds from the tagged
@@ -61,6 +61,16 @@ For the first release, or when a local Git push is unavailable, open
 **Actions → Draft release → Run workflow** on `main`. This builds that exact
 commit and prepares the version tag and draft from `Version.props`. Review and
 publish the draft after the workflow succeeds. Do not reuse an existing version.
+The workflow creates a missing tag before drafting and checks that it resolves
+to the exact workflow source commit. An existing tag pointing elsewhere fails
+the release instead of being moved.
+
+After publication, download the EXE, ZIP, and checksums from that public tag.
+Verify both hashes and the ZIP contents before installing. Confirm that the
+running process, per-user installed EXE, Start menu shortcut, and any enabled
+startup/Explorer commands use the updated installation. A published release
+alone does not update a running local copy. Settings > About checks GitHub only
+when requested; it does not perform installation.
 
 ## Downloads
 

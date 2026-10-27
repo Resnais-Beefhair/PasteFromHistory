@@ -17,7 +17,7 @@ foreach ($file in $requiredFiles) {
 $client = Start-Process -FilePath $sourceExe -ArgumentList '--quit' -WindowStyle Hidden -PassThru
 if (-not $client.WaitForExit(5000)) { throw 'The existing app did not respond. Close it from its tray icon first.' }
 if ($client.ExitCode -ne 0) { throw 'The existing app could not be closed.' }
-$running = Get-Process -Name PasteFromHistory -ErrorAction SilentlyContinue
+$running = Get-Process | Where-Object { $_.ProcessName -match '^(PasteFromHistory(?:-\d+\.\d+\.\d+-win-x64)?|Leikehistoria)$' }
 foreach ($process in $running) {
     if (-not $process.WaitForExit(5000)) { throw 'A copy operation may still be running. Close PasteFromHistory and try again.' }
 }

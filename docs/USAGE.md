@@ -18,7 +18,8 @@ included, so no separate runtime installation is needed.
 
 You can also run **PasteFromHistory.exe** directly. Keep it in a permanent
 folder: Explorer menu commands use its executable path. First launch enables
-the default right-click integration. The app does not download anything.
+the default right-click integration. Update checks are manual; see
+[Update or remove](#update-or-remove).
 
 The target is Windows 11 x64. Releases are currently unsigned, so Windows may
 show an unknown publisher message. SHA-256 checksums are provided with each
@@ -37,10 +38,11 @@ inside the **Show hidden icons** arrow. Drag it to the visible tray if desired.
 | Left-click the tray icon | Open the full history, search, and preview. |
 | Right-click the tray icon | Settings, pause/resume capture, clear history, and quit. |
 
-The quick menu shows **10 clips** by default: pins first, then recent copies.
-Pins count toward this display limit. The full history holds up to **100 unpinned
-clips**, plus up to 50 pins. Both recent-history limits can be changed in Settings.
-Search can find older clips outside the ten visible items.
+The quick menu opens in **Recent** and shows the **10 latest copies** by default,
+including pinned clips at their actual copy time. **Favorites** shows only pins
+in a separate view. Its quick view uses the same display limit. The full history
+holds up to **100 unpinned clips**, plus up to 50 pins. Both recent-history limits
+can be changed in Settings. Search includes older clips outside the visible limit.
 
 The shortcut is system-wide when enabled and can override another application's
 own action, such as plain-text paste. Windows only reports a conflict
@@ -65,21 +67,70 @@ on those clips keep their normal behavior. **Copy** always preserves formats.
 The companion is a separate, non-activating window. It does not inject a row
 into every app's internal menu. Normal right-click behavior is preserved.
 Only enabled, writable text fields identified by Windows UI Automation qualify.
-Read-only fields, static page text, and game/drawing surfaces do not show it.
+Read-only and password fields, static page text, and game/drawing surfaces do not show it.
 Unknown or unresponsive controls are skipped. Some custom editors and elevated
 apps do not expose the required accessibility metadata; the shortcut and tray
 remain available. Recognized native menus are kept clear of the companion.
 
-The version number appears in the Settings window title. You can also inspect
-the EXE's Properties > Details > Product version.
+The version number appears in the Settings window title and **Settings > About**.
+You can also inspect the EXE's Properties > Details > Product version.
+
+## Search, names, and collections
+
+Type words in any order, for example `meeting blue`, to find a clip containing
+both words. Search includes copied text, file paths, custom names, collections,
+and any saved source-app labels. Exact results appear before approximate matches;
+each group keeps newest copies first. Conservative typo matching applies to
+alphabetic words of 4–32 characters. Numbers and short terms require exact
+matches. Exact search covers the whole clip; typo matching is limited on large
+clips. Search stays within the selected **Recent** or **Favorites** view.
+
+In full history, combine **Content type**, **Copied date**, **Source application**,
+and **Collection** filters. **Today** starts at local midnight; **Last 7 days** and
+**Last 30 days** use the preceding elapsed days. **Unfiled** selects clips without
+a collection. The source filter is available when history contains source labels.
+Clear the search and return each filter to its first option to see the whole view.
+
+Select a clip and choose **Rename…**, press **F2**, or use its right-click menu.
+Enter a name of up to 120 characters and an optional collection of up to 60
+characters. Choose an existing collection or type a new one. Leave either field
+empty to remove it. Names and collections do not change copied contents, copy
+time, or retention: **pin a named clip if you want to keep it**. Recopying the same
+content preserves its name, collection, and pin.
+
+## Edit and transform text
+
+Select a text clip and choose **Transform…** from the buttons or its right-click
+menu. The original stays visible beside an editable result. Choose an action,
+review or edit the result, then click **Paste result** or press **Ctrl+Enter**.
+The result is pasted as plain text; the saved original keeps its contents and
+formatting. **Cancel** makes no paste. Each action and **Reset result** starts
+from the original, replacing any edits in the result pane.
+
+| Action | Result |
+| --- | --- |
+| Edit text | Edit a copy before pasting. |
+| Clean whitespace | Trim lines and collapse horizontal whitespace while keeping line breaks. |
+| Join wrapped lines | Join wrapped text with spaces while preserving blank paragraphs, separate list items, and hyphens. |
+| UPPERCASE / lowercase | Change letter case using culture-independent rules. |
+| HTML to Markdown | Convert available HTML headings, emphasis, links, lists, and paragraphs. Without HTML, keep the plain text. |
+| Remove URL tracking | Clean one HTTP(S) URL by removing recognized tracking keys while retaining other parameters and its fragment. |
+
+All actions run locally. HTML is converted without rendering it or fetching
+linked resources; complex formatting may become plain text. URLs containing
+recognized signature or token parameters are left unchanged; custom signing
+schemes cannot all be detected. Check the preview before using a cleaned link.
+Transformations and edited results are limited to
+512K characters; normal paste remains available for larger clips. Images and
+file references do not use these text actions.
 
 ## Pinned clips and expiration
 
 Select a clip and click **Pin** in full history, or press **Ctrl+P** in either
-history window. Repeat to unpin. The **Pinned** filter shows only saved snippets.
-Pins appear first, newest copied first within each group. Recopying identical
-content preserves its pin and refreshes its timestamp; differently formatted
-text is a separate clip.
+history window. Repeat to unpin. **Favorites** shows only pinned clips, newest
+copied first. Pinning does not reorder **Recent**. Recopying identical content
+preserves its pin and refreshes its timestamp; differently formatted text is a
+separate clip.
 
 Pins survive count, size, and age eviction. You can pin up to **50 clips / 16 MiB**,
 within the **48 MiB** total history budget. A pin request exceeding either limit
@@ -107,7 +158,7 @@ and the destination window/focus so it can place or dismiss the companion and
 restore the paste target. Mouse events continue to the original application.
 
 On right-button down, a background check reads accessibility metadata at the
-clicked point: control type, bounds, enabled/focusable state, and read-only flags.
+clicked point: control type, bounds, enabled/focusable state, and read-only/password flags.
 It does not read the field's text or value, or change focus. The check is bounded
 and fails closed if the provider is unavailable; it never waits inside the hook.
 
@@ -124,6 +175,7 @@ does not disable the companion's mouse monitoring.
 - Paths to copied local files and folders. File contents are not backed up;
   originals must still exist when you paste them.
 - Repeated content moves to the top. Different text formatting remains distinct.
+- User-assigned names and collections, and optional source-app labels.
 
 Capture starts with new copies after launch. It does not import Windows Win+V
 history. Each clip is limited to 8 MiB, images to 40 million pixels, and all
@@ -143,8 +195,10 @@ it. This legacy directory name is retained so existing local versions remain
 compatible. Other programs running as the same Windows user can access this
 history; it is not a password vault.
 
-There is no network connection, cloud sync, telemetry, or automatic update
-service. Capture honors `ExcludeClipboardContentFromMonitorProcessing`,
+Capture, search, storage, and text transformations run locally. There is no cloud
+sync, telemetry, or background update check. **Settings > About > Check for
+updates** makes an explicit request to GitHub; it sends no clip contents, source
+names, or settings. Capture honors `ExcludeClipboardContentFromMonitorProcessing`,
 `CanIncludeInClipboardHistory=0`, `application/x-keepassxc-confidential`, and
 `Clipboard Viewer Ignore`. Apps do not always mark sensitive copies. Pause
 capture from the tray when needed; existing clips remain usable while paused.
@@ -153,10 +207,17 @@ Turning off saved history deletes the saved history file, while the current
 session's history stays in memory. **Clear history** removes saved clips but
 leaves the current Windows clipboard unchanged. Start with Windows is off by default.
 
-Settings screenshots with synthetic examples:
-[History](https://github.com/Resnais-Beefhair/PasteFromHistory/blob/v1.2.0/docs/images/settings.png),
-[Access](https://github.com/Resnais-Beefhair/PasteFromHistory/blob/v1.2.0/docs/images/settings-access.png),
-[Privacy](https://github.com/Resnais-Beefhair/PasteFromHistory/blob/v1.2.0/docs/images/settings-privacy.png).
+### Remember source applications
+
+**Settings > Privacy > Remember the source app for new clips** is off by default,
+including after an upgrade. When enabled, it saves the clipboard owner's
+executable name for search, filtering, and the preview. Unknown owners remain
+unlabelled; the foreground app is not substituted as a guess. Window titles,
+document names, and website addresses are not collected as source metadata.
+
+Turning the option off stops future collection but keeps previously saved source
+labels. Recopying without a new source label also keeps the old label. Exclusions
+and clipboard privacy markers apply before recording content or source metadata.
 
 ### Exclude applications
 
@@ -177,7 +238,8 @@ Rules apply to future copies; remove any previously captured sensitive clips
 yourself. Excluding a browser affects all its sites. Helpers and extensions can
 copy under a different process name; process names are not a security identity.
 Exclusions supplement supported privacy markers and pause capture. They cannot
-identify every password or secret. Source process names are not stored per clip.
+identify every password or secret. Saving source names is a separate, optional
+setting described above.
 
 ## Unreadable history
 
@@ -198,6 +260,12 @@ manually when no longer needed. Do not attach them to public issues. A changed
 Windows encryption key may prevent recovery even when the original file exists.
 
 ## Update or remove
+
+Open **Settings > About** to see the current version and click **Check for
+updates** to query this project's latest stable GitHub release. The check runs
+only when clicked. If a newer release exists, the app asks whether to open its
+GitHub release page in your browser. It does not download or install updates.
+Drafts and prereleases are not offered by this check.
 
 Extract a new release ZIP and run its **Install.cmd**. The installer asks the
 running app to save and exit before updating its program files. Settings and

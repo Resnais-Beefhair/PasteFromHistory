@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>PasteFromHistory compatibility fixture</title>
+<style>
+body{font:18px system-ui;margin:24px;max-width:1100px;background:#f3f5f7;color:#17202b}h1{font-size:26px}main{display:grid;grid-template-columns:1fr 1fr;gap:18px}section{padding:16px;background:white;border:1px solid #c4ccd4;border-radius:8px}label{display:block;margin-bottom:8px}input,textarea,[contenteditable]{box-sizing:border-box;width:100%;font:18px system-ui;padding:10px;border:1px solid #64748b;min-height:48px}textarea,[contenteditable]{height:110px}canvas{background:#263547;width:100%;height:100px}p{line-height:1.5}
+</style>
+<h1>PasteFromHistory compatibility fixture</h1>
+<p>Synthetic test page. Right-click writable fields: companion expected. Read-only, disabled, password, page text and canvas: no companion expected. Normal browser menus should remain usable.</p>
+<main>
+<section><label for="input">Writable input</label><input id="input" autocomplete="off"></section>
+<section><label for="readonly">Read-only input</label><input id="readonly" readonly value="Read-only sample"></section>
+<section><label for="textarea">Writable textarea</label><textarea id="textarea"></textarea></section>
+<section><label for="disabled">Disabled input</label><input id="disabled" disabled value="Disabled sample"></section>
+<section><label id="richlabel">Editable rich text</label><div contenteditable="true" role="textbox" aria-labelledby="richlabel"></div></section>
+<section><label for="password">Password field (leave blank)</label><input id="password" type="password" autocomplete="off"></section>
+<section><p id="static">Static page text. Previously focused writable fields must not make this text eligible.</p><button type="button">Ordinary button</button></section>
+<section><label>Game-like canvas</label><canvas width="450" height="100"></canvas></section>
+</main></html>

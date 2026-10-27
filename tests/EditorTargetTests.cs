@@ -89,6 +89,9 @@ internal static class EditorTargetTests
         check(Inspect(edit), "UI Automation recognizes a writable native text field");
         check(!Inspect(readOnly), "UI Automation rejects a read-only text field");
         check(!Inspect(disabled), "UI Automation rejects a disabled text field");
+        edit.UseSystemPasswordChar = true;
+        check(!Inspect(edit), "Password fields do not reveal the history companion");
+        edit.UseSystemPasswordChar = false;
         check(Inspect(rich), "UI Automation recognizes a writable rich-text document");
         rich.ReadOnly = true;
         check(!Inspect(rich), "UI Automation rejects a read-only rich-text document");

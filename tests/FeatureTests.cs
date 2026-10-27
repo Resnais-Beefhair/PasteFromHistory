@@ -243,7 +243,7 @@ internal static class FeatureTests
         Controls(settings).OfType<TextBox>().Single(box => box.AccessibleName == "Excluded applications").Text = "KeePass.exe\r\nKeePassXC.exe";
         render(settings, "settings-privacy.png");
         tabs.SelectedIndex = 3; render(settings, "settings-about.png");
-        check(tabs.SelectedTab!.Text == "About" && settings.Text.Contains("1.3.0")
+        check(tabs.SelectedTab!.Text == "About" && settings.Text.Contains(Application.ProductVersion.Split('+')[0])
             && Controls(settings).OfType<Button>().Any(button => button.Text == "Check for updates" && button.Enabled),
             "About shows the installed version and an explicit update check without starting a request");
         Controls(settings).OfType<Button>().Single(button => button.Text == "Save").PerformClick();

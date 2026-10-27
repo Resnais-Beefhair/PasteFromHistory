@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.3.1 — 2026-10-27
+
+- Recognize Word's writable text surface when its containing document owns
+  keyboard focus. Keep read-only, password, disabled, and unknown surfaces excluded.
+- Recognize Word's owned context menu and adjacent mini toolbar, preserving the
+  original document as the paste destination and avoiding both popup surfaces.
+- Add opt-in test-profile diagnostics for editor eligibility and menu transitions.
+  Diagnostics contain structural metadata, never document contents or titles;
+  unavailable diagnostic files do not interrupt mouse input.
+
 ## 1.3.0 — 2026-10-27
 
 - Keep Recent chronological and browse pinned clips separately in Favorites.

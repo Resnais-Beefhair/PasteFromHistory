@@ -14,7 +14,8 @@ internal sealed class TrayApplication : ApplicationContext
     private readonly MessageWindow messages;
     private readonly MouseObserver mouse;
     private readonly MenuCompanion companion = new();
-    private readonly EditableTargetProbe editableTarget = new();
+    private readonly EditableTargetProbe editableTarget;
+    private readonly object traceGate = new();
     private readonly System.Windows.Forms.Timer rightClickDelay = new() { Interval = 220 };
     private readonly System.Windows.Forms.Timer foregroundTimer = new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer retentionTimer = new() { Interval = 60_000 };
@@ -39,6 +40,7 @@ internal sealed class TrayApplication : ApplicationContext
         // popups remain absent from the taskbar and do not activate on display.
         if (testMode) companion.ShowInTaskbar = true;
         settingsPath = Path.Combine(dataDirectory, "settings.json");
+        editableTarget = new(trace: testMode ? Trace : null);
         try { settings = AppSettings.Load(settingsPath); }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or UnauthorizedAccessException)
         { settings = new(); startupNotice = "Settings could not be read. The app is using its defaults."; }
@@ -101,11 +103,22 @@ internal sealed class TrayApplication : ApplicationContext
             rightClickDelay.Stop();
             var pending = pendingClick;
             pendingClick = null;
-            if (pending == null) return;
+            if (pending == null) { Trace("right-click timer reject=no-pending-click"); return; }
             var generation = clickGeneration;
-            var menu = Native.FindMenu(pending.Target.Window, pending.Point);
-            if (await pending.Editable && !exiting && generation == clickGeneration && CanOfferCompanion(pending.Target)
-                && Native.Root(Native.GetForegroundWindow()) == Native.Root(pending.Target.Window)
+            var menu = Native.FindMenu(pending.Target.Window, pending.Point, testMode ? Trace : null);
+            var editable = await pending.Editable;
+            if (testMode)
+            {
+                var foreground = Native.GetForegroundWindow();
+                Trace($"right-click timer editable={editable} exiting={exiting} generation-match={generation == clickGeneration}"
+                    + $" can-offer={CanOfferCompanion(pending.Target)} foreground-class={Native.ClassName(foreground)}"
+                    + $" target-class={Native.ClassName(pending.Target.Window)} same-root={Native.Root(foreground) == Native.Root(pending.Target.Window)}"
+                    + $" foreground-own={Native.IsOwnWindow(foreground)} target-own={Native.IsOwnWindow(pending.Target.Window)}"
+                    + $" menu-found={menu != null} menu-visible={menu != null && Native.IsWindowVisible(menu.Value.Handle)}"
+                    + $" escape-down={(Native.GetAsyncKeyState(Native.VK_ESCAPE) & 0x8000) != 0}");
+            }
+            if (editable && !exiting && generation == clickGeneration && CanOfferCompanion(pending.Target)
+                && Native.IsTargetForeground(pending.Target.Window)
                 && (menu == null || Native.IsWindowVisible(menu.Value.Handle))
                 && (Native.GetAsyncKeyState(Native.VK_ESCAPE) & 0x8000) == 0)
             {
@@ -117,7 +130,7 @@ internal sealed class TrayApplication : ApplicationContext
         {
             var window = target.Window;
             var foreground = Native.GetForegroundWindow();
-            if (Native.Root(foreground) != Native.Root(window) && !Native.IsOwnWindow(foreground)) return;
+            if (!Native.IsTargetForeground(window) && !Native.IsOwnWindow(foreground)) return;
             Native.SetForegroundWindow(window);
             Native.SendEscape();
             await Task.Delay(90);
@@ -159,9 +172,12 @@ internal sealed class TrayApplication : ApplicationContext
     {
         var down = rightDownClick;
         rightDownClick = null;
+        if (testMode) Trace($"right-click up down-found={down != null} target-match={down?.Target.Window == target.Window}"
+            + $" can-offer={CanOfferCompanion(target)} target-class={Native.ClassName(target.Window)} target-own={Native.IsOwnWindow(target.Window)}");
         if (down == null || down.Target.Window != target.Window || !CanOfferCompanion(target)) return;
         // A right-button drag is not a request for the editor's context menu.
         var drag = SystemInformation.DragSize;
+        if (testMode) Trace($"right-click movement dx={Math.Abs(point.X - down.Point.X)} dy={Math.Abs(point.Y - down.Point.Y)} limit={drag.Width},{drag.Height}");
         if (Math.Abs(point.X - down.Point.X) > drag.Width || Math.Abs(point.Y - down.Point.Y) > drag.Height) return;
         pendingClick = down with { Point = point };
         rightClickDelay.Stop(); rightClickDelay.Start();
@@ -186,7 +202,14 @@ internal sealed class TrayApplication : ApplicationContext
 
     private void Trace(string message)
     {
-        if (testMode) File.AppendAllText(Path.Combine(Path.GetDirectoryName(settingsPath)!, "ui-diagnostics.txt"), DateTime.Now.ToString("HH:mm:ss.fff ") + message + Environment.NewLine);
+        if (!testMode) return;
+        try
+        {
+            lock (traceGate)
+                File.AppendAllText(Path.Combine(Path.GetDirectoryName(settingsPath)!, "ui-diagnostics.txt"), DateTime.Now.ToString("HH:mm:ss.fff ") + message + Environment.NewLine);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Security.SecurityException)
+        { /* Diagnostic output is best effort and never interrupts input. */ }
     }
 
     public void Handle(LaunchRequest request)
@@ -213,6 +236,11 @@ internal sealed class TrayApplication : ApplicationContext
         PruneHistory();
         CancelPendingClick(); companion.Hide(); popup?.Close();
         var form = new HistoryForm(history, settings, true, target.Folder);
+        if (testMode)
+        {
+            form.Deactivate += (_, _) => Trace("popup deactivated foreground=" + Native.ClassName(Native.GetForegroundWindow()));
+            form.FormClosed += (_, e) => Trace("popup closed reason=" + e.CloseReason + ", foreground=" + Native.ClassName(Native.GetForegroundWindow()));
+        }
         if (testMode) form.ShowInTaskbar = true;
         popup = form;
         form.Chosen += (entry, paste, plainText) => Choose(form, entry, target, paste, plainText);
@@ -223,7 +251,7 @@ internal sealed class TrayApplication : ApplicationContext
         form.Location = new Point(Math.Clamp(location.X, work.Left, Math.Max(work.Left, work.Right - form.Width)),
             Math.Clamp(location.Y, work.Top, Math.Max(work.Top, work.Bottom - form.Height)));
         form.Show(); form.Activate();
-        Trace("popup shown: visible=" + form.Visible + ", disposed=" + form.IsDisposed);
+        Trace("popup shown: visible=" + form.Visible + ", disposed=" + form.IsDisposed + ", foreground=" + Native.ClassName(Native.GetForegroundWindow()));
     }
 
     private void ShowHistory(PasteTarget target)

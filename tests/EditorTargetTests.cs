@@ -40,6 +40,27 @@ internal static class EditorTargetTests
             var failing = new EditableTargetProbe((_, _) => throw failure);
             check(!failing.CheckAsync(default, 1).GetAwaiter().GetResult(), "Unavailable provider fails closed: " + failure.GetType().Name);
         }
+        var brokenDiagnostics = new EditableTargetProbe((_, _) => true, trace: _ => throw new IOException("Synthetic locked diagnostic file"));
+        check(brokenDiagnostics.CheckAsync(default, 1).GetAwaiter().GetResult(),
+            "Unavailable test diagnostics do not suppress a valid editor");
+        var diagnostics = new List<string>();
+        const string privateMessage = "Synthetic private document content";
+        var diagnosticFailure = new EditableTargetProbe((_, _) => throw new InvalidOperationException(privateMessage), trace: diagnostics.Add);
+        check(!diagnosticFailure.CheckAsync(default, 1).GetAwaiter().GetResult()
+            && diagnostics.Any(line => line.Contains("InvalidOperationException"))
+            && diagnostics.All(line => !line.Contains(privateMessage)),
+            "Provider diagnostics record exception type without copying potentially private exception messages");
+
+        var wordMenu = new Rectangle(1233, 711, 279, 497);
+        var wordToolbar = new Rectangle(1233, 612, 490, 80);
+        var distantToolbar = new Rectangle(1800, 612, 300, 80);
+        var wordBounds = Native.UnionAdjacentMenuBounds(wordMenu, [wordToolbar, distantToolbar], 30);
+        check(wordBounds == Rectangle.Union(wordMenu, wordToolbar),
+            "Word context menu bounds include its adjacent mini toolbar but exclude a distant toolbar");
+        var placement = new Rectangle(CompanionPlacement.Locate(wordMenu.Location, new Size(300, 58),
+            new Rectangle(0, 0, 3840, 1400), wordBounds, 7), new Size(300, 58));
+        check(!placement.IntersectsWith(wordMenu) && !placement.IntersectsWith(wordToolbar),
+            "Word companion placement avoids both the menu and its mini toolbar");
 
         foreach (var scale in new[] { 1, 1.5, 2 })
         {

@@ -26,6 +26,7 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length == 2 && args[0] == "--prepare-manual") { ManualValidation.Prepare(args[1]); return 0; }
         if (args.Length == 2 && args[0] == "--paste-target") { FeatureInteractionTests.RunTarget(args[1]); return 0; }
         if (args.Contains("--ui")) { Application.Run(new TestHost()); return 0; }
         output = Path.GetFullPath(args.FirstOrDefault(arg => !arg.StartsWith("--")) ?? "artifacts");
@@ -41,6 +42,9 @@ internal static class Program
 
     private static void Run()
     {
+        SearchMetadataTests.Run(Check);
+        TextTransformTests.Run(Check);
+        ReleaseUpdateTests.Run(Check);
         EditorTargetTests.Run(Check);
         Check(new AppSettings().MenuCount == 10, "Ten recent entries by default");
         Check(!new AppSettings().HotkeyEnabled, "Global shortcut is opt-in by default");
@@ -160,9 +164,13 @@ internal static class Program
             Check(rows.Items.Count == 10, "Popup displays exactly ten recent entries");
             var search = Descendants(quick).OfType<TextBox>().Single(t => t.AccessibleName == "Search history");
             search.Text = "great day";
+            var searchWait = System.Diagnostics.Stopwatch.StartNew();
+            while (!rows.Enabled && searchWait.ElapsedMilliseconds < 2000) { Application.DoEvents(); Thread.Sleep(5); }
             Check(rows.Items.Count == 1, "Popup search includes older history");
         }
         FeatureTests.RunUi(Check, Render);
+        HistoryBrowserTests.Run(Check);
+        TextTransformTests.RunUi(Check, Render);
         using (var emptyForm = new HistoryForm(new(), new(), false)) Render(emptyForm, "empty-history.png");
         using var icon = Theme.CreateIcon(); using var iconFile = File.Create(Path.Combine(output, "PasteFromHistory.ico")); icon.Save(iconFile);
         Check(true, "UI previews and application icon rendered");

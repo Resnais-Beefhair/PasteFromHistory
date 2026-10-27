@@ -49,7 +49,7 @@ internal sealed class EditableTargetProbe
         for (var depth = 0; element != null && depth < 8; depth++)
         {
             var current = element.Current;
-            if (current.ProcessId != process || !current.IsEnabled || current.IsOffscreen
+            if (current.ProcessId != process || !current.IsEnabled || current.IsOffscreen || current.IsPassword
                 || !current.BoundingRectangle.Contains(position)) return false;
             var type = current.ControlType;
             if (type == ControlType.Edit || type == ControlType.Document)

@@ -20,10 +20,23 @@ internal sealed class HistoryForm : Form
     private readonly Button remove;
     private readonly Button pastePlain;
     private readonly Button pin;
+    private readonly Button rename;
+    private readonly Button transform;
+    private readonly ComboBox kindFilter;
+    private readonly ComboBox dateFilter;
+    private readonly ComboBox sourceFilter;
+    private readonly ComboBox collectionFilter;
+    private readonly ContextMenuStrip entryMenu;
+    private readonly System.Windows.Forms.Timer searchDelay = new() { Interval = 120 };
     private readonly Dictionary<Guid, Image> thumbnails = [];
     private readonly List<Button> filterButtons = [];
-    private ClipKind? filter;
     private bool pinnedOnly;
+    private bool refreshing;
+    private bool modalChildOpen;
+    private sealed record FilterChoice(string Label, string? Value)
+    {
+        public override string ToString() => Label;
+    }
     public event Action<ClipEntry, bool, bool>? Chosen;
     public event Action? SettingsRequested;
     public event Action? FullHistoryRequested;
@@ -34,25 +47,26 @@ internal sealed class HistoryForm : Form
         this.history = history; this.settings = settings; this.compact = compact;
         Theme.Style(this);
         Text = compact ? "Paste from history" : "PasteFromHistory";
-        ClientSize = compact ? new Size(480, Math.Clamp(320 + settings.MenuCount * 51, 420, 1100)) : new Size(940, 680);
-        MinimumSize = compact ? new Size(420, 390) : new Size(780, 560);
+        ClientSize = compact ? new Size(480, Math.Clamp(320 + settings.MenuCount * 51, 420, 1100)) : new Size(980, 720);
+        MinimumSize = compact ? new Size(420, 390) : new Size(800, 680);
         StartPosition = compact ? FormStartPosition.Manual : FormStartPosition.CenterScreen;
         FormBorderStyle = compact ? FormBorderStyle.FixedSingle : FormBorderStyle.Sizable;
         ShowInTaskbar = !compact; MaximizeBox = !compact; MinimizeBox = !compact;
         TopMost = compact; KeyPreview = true;
         Padding = new Padding(compact ? 16 : 24);
 
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 6, BackColor = Theme.Back };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 7, BackColor = Theme.Back };
         foreach (var size in new[] { 70f, 43f, 40f }) layout.RowStyles.Add(new RowStyle(SizeType.Absolute, size));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, compact ? 0 : 64));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, compact ? 96 : 92));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, compact ? 96 : 104));
         layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         Controls.Add(layout);
 
         var header = new Panel { Dock = DockStyle.Fill, Margin = Padding.Empty };
         var title = Theme.Label(compact ? "Paste from history" : "PasteFromHistory", Theme.Title);
         title.Location = new Point(0, 0); header.Controls.Add(title);
-        var subtitle = Theme.Label(compact ? "Pinned first, then your recent clips." : "Everything you copied, close at hand.", Theme.Small, Theme.Muted);
+        var subtitle = Theme.Label(compact ? "Your latest copies, with favorites one click away." : "Find a clip. Make it yours. Paste it anywhere.", Theme.Small, Theme.Muted);
         subtitle.Location = new Point(2, 43); header.Controls.Add(subtitle);
         if (!compact)
         {
@@ -65,11 +79,19 @@ internal sealed class HistoryForm : Form
 
         search = new TextBox
         {
-            Dock = DockStyle.Top, PlaceholderText = "Search history…", Font = new Font("Segoe UI", 11),
+            Dock = DockStyle.Top, PlaceholderText = "Search words, names, or collections…", Font = new Font("Segoe UI", 11),
             BackColor = Theme.Surface, ForeColor = Theme.Text, BorderStyle = BorderStyle.FixedSingle,
             Margin = new Padding(0, 4, 0, 4), AccessibleName = "Search history"
         };
-        search.TextChanged += (_, _) => RefreshEntries();
+        search.TextChanged += (_, _) =>
+        {
+            searchDelay.Stop(); searchDelay.Start();
+            // Do not let a click paste a stale result while a new query is pending.
+            list!.Enabled = false;
+            count!.Text = "Searching…";
+            UpdatePreview();
+        };
+        searchDelay.Tick += (_, _) => RefreshEntries();
         search.KeyDown += (_, e) =>
         {
             if (e.KeyCode == Keys.Down && list!.Items.Count > 0) { list.Focus(); e.Handled = true; }
@@ -79,13 +101,35 @@ internal sealed class HistoryForm : Form
         var filters = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Margin = Padding.Empty };
         count = Theme.Label("", Theme.Small, Theme.Muted);
         count.Margin = new Padding(2, 9, 0, 0);
+        AddScope("Recent", false); AddScope("Favorites", true);
+        foreach (var button in filterButtons) filters.Controls.Add(button);
+        count.Margin = new Padding(12, 9, 0, 0);
+        filters.Controls.Add(count); layout.Controls.Add(filters, 0, 2);
+
+        kindFilter = FilterCombo("Content type");
+        kindFilter.Items.AddRange(["All types", "Text", "Images", "Files"]); kindFilter.SelectedIndex = 0;
+        dateFilter = FilterCombo("Copied date");
+        dateFilter.Items.AddRange(["Any time", "Today", "Last 7 days", "Last 30 days"]); dateFilter.SelectedIndex = 0;
+        sourceFilter = FilterCombo("Source application");
+        collectionFilter = FilterCombo("Collection");
         if (!compact)
         {
-            AddFilter("All", null); AddFilter("Text", ClipKind.Text); AddFilter("Images", ClipKind.Image); AddFilter("Files", ClipKind.Files); AddFilter("Pinned", null, true);
-            foreach (var button in filterButtons) filters.Controls.Add(button);
-            count.Margin = new Padding(18, 9, 0, 0);
+            var refinements = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 4, RowCount = 2, Margin = Padding.Empty };
+            refinements.RowStyles.Add(new RowStyle(SizeType.Absolute, 21));
+            refinements.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+            var boxes = new[] { kindFilter, dateFilter, sourceFilter, collectionFilter };
+            for (var i = 0; i < boxes.Length; i++)
+            {
+                refinements.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
+                var label = Theme.Label(boxes[i].AccessibleName!, Theme.Small, Theme.Muted);
+                label.Margin = new Padding(0, 0, 8, 0);
+                refinements.Controls.Add(label, i, 0);
+                refinements.Controls.Add(boxes[i], i, 1);
+            }
+            layout.Controls.Add(refinements, 0, 3);
         }
-        filters.Controls.Add(count); layout.Controls.Add(filters, 0, 2);
+        foreach (var box in new[] { kindFilter, dateFilter, sourceFilter, collectionFilter })
+            box.SelectedIndexChanged += (_, _) => { if (!refreshing) RefreshEntries(); };
 
         list = new ListBox
         {
@@ -101,6 +145,10 @@ internal sealed class HistoryForm : Form
         {
             if (compact && e.Button == MouseButtons.Left && list.IndexFromPoint(e.Location) >= 0) Choose(true, ModifierKeys.HasFlag(Keys.Shift));
         };
+        list.MouseDown += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right) list.SelectedIndex = list.IndexFromPoint(e.Location);
+        };
         empty = Theme.Label("Your history starts here.\n\nCopy some text, an image, or a file.", Theme.Body, Theme.Muted);
         empty.AutoSize = false; empty.Dock = DockStyle.Fill; empty.TextAlign = ContentAlignment.MiddleCenter;
         empty.BackColor = Theme.Surface;
@@ -110,13 +158,18 @@ internal sealed class HistoryForm : Form
         previewTitle = Theme.Label("PREVIEW", Theme.Small, Theme.Accent);
         previewTitle.Dock = DockStyle.Top; previewTitle.Height = 30; previewTitle.AutoSize = false;
         previewMeta = Theme.Label("", Theme.Small, Theme.Muted);
-        previewMeta.Dock = DockStyle.Bottom; previewMeta.Height = 44; previewMeta.AutoSize = false;
+        previewMeta.Dock = DockStyle.Bottom; previewMeta.Height = 72; previewMeta.AutoSize = false; previewMeta.AutoEllipsis = true;
         preview = new TextBox { Multiline = true, ReadOnly = true, Dock = DockStyle.Fill, ScrollBars = ScrollBars.Vertical,
             BackColor = Theme.Surface, ForeColor = Theme.Text, BorderStyle = BorderStyle.None, Font = Theme.Body, AccessibleName = "Clip preview" };
         picture = new PictureBox { Dock = DockStyle.Fill, SizeMode = PictureBoxSizeMode.Zoom, BackColor = Theme.Surface, Visible = false };
         var previewHost = new Panel { Dock = DockStyle.Fill, BackColor = Theme.Surface, Padding = new Padding(18), Margin = Padding.Empty };
         previewHost.Controls.Add(preview); previewHost.Controls.Add(picture); previewHost.Controls.Add(previewTitle); previewHost.Controls.Add(previewMeta);
-        if (compact) layout.Controls.Add(listHost, 0, 3);
+        if (compact)
+        {
+            layout.Controls.Add(listHost, 0, 4);
+            previewHost.Visible = false;
+            Controls.Add(previewHost); // Own the unused preview controls for deterministic disposal.
+        }
         else
         {
             var body = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1, Margin = Padding.Empty };
@@ -124,44 +177,65 @@ internal sealed class HistoryForm : Form
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 14));
             body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 39));
             body.Controls.Add(listHost, 0, 0); body.Controls.Add(previewHost, 2, 0);
-            layout.Controls.Add(body, 0, 3);
+            layout.Controls.Add(body, 0, 4);
         }
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, WrapContents = true, Margin = Padding.Empty, Padding = new Padding(0, 7, 0, 0) };
         paste = Theme.Button(folder == null ? "Paste" : "Paste to folder", () => Choose(true, ModifierKeys.HasFlag(Keys.Shift)), true);
         pastePlain = Theme.Button("Paste as text", () => Choose(true, true));
         pin = Theme.Button("Pin", TogglePin);
+        rename = Theme.Button("Rename…", RenameClip);
+        transform = Theme.Button("Transform…", TransformClip);
         copy = Theme.Button("Copy", () => Choose(false));
         remove = Theme.Button("Delete", () => { if (Selected is { } entry) history.Remove(entry.Id); });
-        actions.Controls.Add(paste); actions.Controls.Add(pastePlain); actions.Controls.Add(copy);
+        actions.Controls.Add(paste); actions.Controls.Add(pastePlain); actions.Controls.Add(copy); actions.Controls.Add(transform);
         if (compact) actions.Controls.Add(Theme.Button("Full history", () => FullHistoryRequested?.Invoke()));
         else
         {
+            actions.Controls.Add(rename);
             actions.Controls.Add(pin);
             actions.Controls.Add(remove);
             actions.Controls.Add(Theme.Button("Clear", () => ClearRequested?.Invoke()));
         }
-        layout.Controls.Add(actions, 0, 4);
+        layout.Controls.Add(actions, 0, 5);
         var tip = Theme.Label(folder != null ? "To folder: " + folder : compact ? "Shift+Enter / Shift+click: plain text\nEnter: paste    ·    Esc: close    ·    Alt+1–9: select"
-            : "Shift+Enter / Shift+double-click: plain text    ·    Ctrl+P: pin or unpin\nRight-click → Paste from history"
+            : "Shift+Enter: plain text    ·    Ctrl+P: pin or unpin    ·    F2: name and collection\nRight-click → Paste from history"
                 + (settings.HotkeyEnabled ? "    ·    " + settings.Shortcut : ""), Theme.Small, Theme.Muted);
         tip.AutoSize = false; tip.Dock = DockStyle.Fill; tip.AutoEllipsis = true; tip.TextAlign = ContentAlignment.MiddleLeft;
-        layout.Controls.Add(tip, 0, 5);
+        layout.Controls.Add(tip, 0, 6);
+
+        entryMenu = new ContextMenuStrip { Font = Theme.Body };
+        var menuPaste = entryMenu.Items.Add("Paste", null, (_, _) => Choose(true));
+        var menuPlain = entryMenu.Items.Add("Paste as text", null, (_, _) => Choose(true, true));
+        var menuTransform = entryMenu.Items.Add("Transform…", null, (_, _) => TransformClip());
+        var menuRename = entryMenu.Items.Add("Rename…", null, (_, _) => RenameClip());
+        var menuPin = entryMenu.Items.Add("Pin", null, (_, _) => TogglePin());
+        var menuDelete = entryMenu.Items.Add("Delete", null, (_, _) => { if (Selected is { } entry) history.Remove(entry.Id); });
+        entryMenu.Opening += (_, _) =>
+        {
+            menuPaste.Enabled = menuRename.Enabled = menuPin.Enabled = menuDelete.Enabled = Selected != null;
+            menuPlain.Enabled = menuTransform.Enabled = Selected?.Kind == ClipKind.Text;
+            menuPin.Text = Selected?.Pinned == true ? "Unpin" : "Pin";
+        };
+        list.ContextMenuStrip = entryMenu;
 
         KeyDown += (_, e) =>
         {
             if (e.KeyCode == Keys.Escape) { Close(); e.SuppressKeyPress = true; }
-            else if (e.KeyCode == Keys.Enter && !e.Control) { Choose(true, e.Shift); e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.Enter && !e.Control && !e.Alt && ActiveControl is not ComboBox)
+                { Choose(true, e.Shift); e.SuppressKeyPress = true; }
             else if (e.Control && e.KeyCode == Keys.F) { search.Focus(); e.SuppressKeyPress = true; }
             else if (e.Control && e.KeyCode == Keys.P) { TogglePin(); e.SuppressKeyPress = true; }
+            else if (e.KeyCode == Keys.F2) { RenameClip(); e.SuppressKeyPress = true; }
             else if (e.Alt && e.KeyCode >= Keys.D1 && e.KeyCode <= Keys.D9)
             {
+                FlushSearch();
                 var index = (int)e.KeyCode - (int)Keys.D1;
                 if (index < list.Items.Count) { list.SelectedIndex = index; Choose(true); }
                 e.SuppressKeyPress = true;
             }
         };
-        if (compact) Deactivate += (_, _) => { if (!IsDisposed) Close(); };
+        if (compact) Deactivate += (_, _) => { if (!IsDisposed && !modalChildOpen && !entryMenu.Visible) Close(); };
         history.Changed += RefreshEntries;
         FormClosed += (_, _) => history.Changed -= RefreshEntries;
         Shown += (_, _) => search.Focus();
@@ -172,20 +246,62 @@ internal sealed class HistoryForm : Form
 
     private ClipEntry? Selected => list.SelectedItem as ClipEntry;
 
-    private void AddFilter(string text, ClipKind? kind, bool onlyPins = false)
+    private void AddScope(string text, bool onlyPins)
     {
-        var button = Theme.Button(text, () => { filter = kind; pinnedOnly = onlyPins; RefreshEntries(); });
-        button.Tag = (kind, onlyPins); button.Font = Theme.Small; button.Padding = new Padding(9, 2, 9, 2); button.Margin = new Padding(0, 0, 6, 0);
+        var button = Theme.Button(text, () => { pinnedOnly = onlyPins; RefreshEntries(); });
+        button.Tag = onlyPins; button.Font = Theme.Small; button.Padding = new Padding(9, 2, 9, 2); button.Margin = new Padding(0, 0, 6, 0);
         filterButtons.Add(button);
+    }
+
+    private static ComboBox FilterCombo(string name) => new()
+    {
+        AccessibleName = name, DropDownStyle = ComboBoxStyle.DropDownList, Dock = DockStyle.Top,
+        BackColor = Theme.Surface, ForeColor = Theme.Text, Font = Theme.Small,
+        Margin = new Padding(0, 2, 8, 0), IntegralHeight = false, DropDownHeight = 220
+    };
+
+    private void RenameClip()
+    {
+        FlushSearch();
+        if (Selected is not { } entry) return;
+        modalChildOpen = true;
+        try
+        {
+            using var dialog = new ClipDetailsForm(entry, history.Entries.Select(e => e.Collection));
+            if (dialog.ShowDialog(this) == DialogResult.OK)
+            {
+                var error = history.SetMetadata(entry.Id, dialog.ClipName, dialog.Collection);
+                if (error != null) MessageBox.Show(this, error, "Clip details", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+        }
+        finally { modalChildOpen = false; }
+    }
+
+    private void TransformClip()
+    {
+        FlushSearch();
+        if (Selected is not { Kind: ClipKind.Text } entry) return;
+        modalChildOpen = true;
+        try
+        {
+            using var dialog = new TransformPreviewForm(entry);
+            if (dialog.ShowDialog(this) == DialogResult.OK && dialog.Result is { } result)
+                Chosen?.Invoke(result, true, true);
+        }
+        finally { modalChildOpen = false; }
     }
 
     private void Choose(bool shouldPaste, bool plainText = false)
     {
+        FlushSearch();
         if (Selected is { } entry) Chosen?.Invoke(entry, shouldPaste, plainText && entry.Kind == ClipKind.Text);
     }
 
+    private void FlushSearch() { if (searchDelay.Enabled) RefreshEntries(); }
+
     private void TogglePin()
     {
+        FlushSearch();
         if (Selected is not { } entry) return;
         var error = history.SetPinned(entry.Id, !entry.Pinned, settings.HistoryLimit, settings.RetentionDays);
         if (error != null) MessageBox.Show(this, error, "Pinned clips", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -193,22 +309,43 @@ internal sealed class HistoryForm : Form
 
     public void RefreshEntries()
     {
-        if (IsDisposed) return;
+        if (IsDisposed || refreshing) return;
+        searchDelay.Stop();
+        refreshing = true;
+        try
+        {
         var id = Selected?.Id;
-        var entries = history.Entries.Where(e => (filter == null || filter == e.Kind) && (!pinnedOnly || e.Pinned) && e.Matches(search.Text))
-            .OrderByDescending(e => e.Pinned).ToList();
+        UpdateChoices(sourceFilter, "All applications", history.Entries.Select(e => e.SourceApp));
+        UpdateChoices(collectionFilter, "All collections", history.Entries.Select(e => e.Collection), includeUnfiled: true);
+        sourceFilter.Enabled = history.Entries.Any(e => e.SourceApp.Length != 0);
+        var source = (sourceFilter.SelectedItem as FilterChoice)?.Value;
+        var collection = (collectionFilter.SelectedItem as FilterChoice)?.Value;
+        ClipKind? kind = kindFilter.SelectedIndex switch { 1 => ClipKind.Text, 2 => ClipKind.Image, 3 => ClipKind.Files, _ => null };
+        var now = DateTimeOffset.Now;
+        DateTimeOffset? since = dateFilter.SelectedIndex switch
+        {
+            1 => new DateTimeOffset(now.LocalDateTime.Date), 2 => now.AddDays(-7), 3 => now.AddDays(-30), _ => null
+        };
+        var candidates = history.Entries.Where(e => (!pinnedOnly || e.Pinned) && (kind == null || kind == e.Kind)
+            && (since == null || e.CapturedAt >= since)
+            && (source == null || string.Equals(source, e.SourceApp, StringComparison.OrdinalIgnoreCase))
+            && (collection == null || string.Equals(collection, e.Collection, StringComparison.OrdinalIgnoreCase)))
+            .OrderByDescending(e => e.CapturedAt);
+        var entries = HistorySearch.Find(candidates, search.Text).ToList();
+        var matchedCount = entries.Count;
         if (compact) entries = entries.Take(settings.MenuCount).ToList();
-        list.BeginUpdate(); list.Items.Clear();
+        list.BeginUpdate(); list.Items.Clear(); list.Enabled = true;
         foreach (var entry in entries) list.Items.Add(entry);
         if (entries.Count > 0) list.SelectedIndex = Math.Max(0, entries.FindIndex(e => e.Id == id));
         list.EndUpdate();
-        count.Text = compact ? $"{entries.Count} shown · {history.Entries.Count} total" : $"{entries.Count} clips · {history.Entries.Count(e => e.Pinned)} pinned";
-        empty.Text = string.IsNullOrEmpty(search.Text) && filter == null && !pinnedOnly
-            ? "Your history starts here.\n\nCopy some text, an image, or a file." : "No matches.\n\nTry another search.";
+        count.Text = compact ? $"{entries.Count} of {matchedCount}" : $"{matchedCount} clips";
+        empty.Text = history.Entries.Count == 0 ? "Your history starts here.\n\nCopy some text, an image, or a file."
+            : pinnedOnly && !history.Entries.Any(e => e.Pinned) ? "No favorites yet.\n\nSelect a clip in Recent and pin it with Ctrl+P."
+            : "No matches.\n\nTry another search or adjust the filters.";
         empty.Visible = entries.Count == 0;
         foreach (var button in filterButtons)
         {
-            var active = Equals(button.Tag, (filter, pinnedOnly));
+            var active = Equals(button.Tag, pinnedOnly);
             button.BackColor = active ? Theme.Hover : Theme.Back;
             button.ForeColor = active ? Theme.Accent : Theme.Muted;
         }
@@ -219,20 +356,38 @@ internal sealed class HistoryForm : Form
             thumbnails[idToRemove].Dispose();
             thumbnails.Remove(idToRemove);
         }
+        }
+        finally { refreshing = false; }
+    }
+
+    private static void UpdateChoices(ComboBox combo, string allLabel, IEnumerable<string> values, bool includeUnfiled = false)
+    {
+        var selectedValue = (combo.SelectedItem as FilterChoice)?.Value;
+        var choices = new List<FilterChoice> { new(allLabel, null) };
+        if (includeUnfiled) choices.Add(new("Unfiled", ""));
+        choices.AddRange(values.Where(value => value.Length != 0).Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(value => value, StringComparer.CurrentCultureIgnoreCase).Select(value => new FilterChoice(value, value)));
+        if (combo.Items.Cast<FilterChoice>().SequenceEqual(choices)) return;
+        combo.BeginUpdate(); combo.Items.Clear(); combo.Items.AddRange(choices.Cast<object>().ToArray());
+        combo.SelectedIndex = Math.Max(0, choices.FindIndex(choice => string.Equals(choice.Value, selectedValue, StringComparison.OrdinalIgnoreCase)));
+        combo.EndUpdate();
     }
 
     private void UpdatePreview()
     {
-        var entry = Selected;
-        paste.Enabled = copy.Enabled = remove.Enabled = pin.Enabled = entry != null;
-        pastePlain.Enabled = entry?.Kind == ClipKind.Text;
+        var entry = searchDelay.Enabled ? null : Selected;
+        paste.Enabled = copy.Enabled = remove.Enabled = pin.Enabled = rename.Enabled = entry != null;
+        pastePlain.Enabled = transform.Enabled = entry?.Kind == ClipKind.Text;
         pin.Text = entry?.Pinned == true ? "Unpin" : "Pin";
+        if (compact) return;
         picture.Image = null; picture.Visible = false; preview.Visible = true;
         preview.Text = "Select a clip to preview its contents.";
         previewTitle.Text = "PREVIEW"; previewMeta.Text = "";
         if (entry == null) return;
-        previewTitle.Text = entry.KindLabel + (entry.Pinned ? " · PINNED" : "");
-        previewMeta.Text = entry.CapturedAt.ToLocalTime().ToString("g") + "\n" + entry.Detail;
+        previewTitle.Text = entry.KindLabel + (entry.Pinned ? " · FAVORITE" : "");
+        previewMeta.Text = entry.CapturedAt.ToLocalTime().ToString("g") + " · " + entry.Detail
+            + (entry.Collection.Length != 0 ? "\nCollection: " + entry.Collection : "")
+            + (entry.SourceApp.Length != 0 ? "\nFrom: " + entry.SourceApp : "");
         preview.Text = entry.Kind == ClipKind.Files ? string.Join(Environment.NewLine + Environment.NewLine, entry.Paths) : entry.Text;
         if (entry.Kind == ClipKind.Image)
         {
@@ -282,7 +437,8 @@ internal sealed class HistoryForm : Form
         TextRenderer.DrawText(e.Graphics, entry.Title, Theme.Body, text, Theme.Text,
             TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
         var meta = new Rectangle(text.Left, text.Top + S(22), text.Width, S(20));
-        TextRenderer.DrawText(e.Graphics, (entry.Pinned ? "PINNED  ·  " : "") + entry.KindLabel + "  ·  " + entry.CapturedAt.ToLocalTime().ToString("HH:mm") + (compact ? "" : "  ·  " + entry.Detail),
+        TextRenderer.DrawText(e.Graphics, (entry.Pinned ? "FAVORITE  ·  " : "") + entry.KindLabel + "  ·  " + entry.CapturedAt.ToLocalTime().ToString("HH:mm")
+            + (compact ? "" : "  ·  " + (entry.Collection.Length != 0 ? entry.Collection : entry.Detail)),
             Theme.Small, meta, Theme.Muted, TextFormatFlags.EndEllipsis | TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
         using var line = new Pen(Theme.Border);
         e.Graphics.DrawLine(line, e.Bounds.Left + S(14), e.Bounds.Bottom - 1, e.Bounds.Right - S(14), e.Bounds.Bottom - 1);
@@ -296,7 +452,14 @@ internal sealed class HistoryForm : Form
 
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { history.Changed -= RefreshEntries; foreach (var image in thumbnails.Values) image.Dispose(); }
+        if (disposing)
+        {
+            history.Changed -= RefreshEntries;
+            searchDelay.Dispose();
+            foreach (var image in thumbnails.Values) image.Dispose();
+            entryMenu.Dispose();
+            if (compact) { kindFilter.Dispose(); dateFilter.Dispose(); sourceFilter.Dispose(); collectionFilter.Dispose(); rename.Dispose(); pin.Dispose(); remove.Dispose(); }
+        }
         base.Dispose(disposing);
     }
 }

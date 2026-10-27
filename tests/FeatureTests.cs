@@ -204,7 +204,7 @@ internal static class FeatureTests
             render(form, "features-history.png");
             var list = Controls(form).OfType<ListBox>().Single();
             Button Button(string title) => Controls(form).OfType<Button>().Single(button => button.Text == title);
-            check(((ClipEntry)list.Items[0]).Id == pinned.Id, "History UI places pinned clips before newer unpinned clips");
+            check(((ClipEntry)list.Items[0]).Kind == ClipKind.Files, "Recent history stays chronological instead of promoting older favorites");
             list.SelectedItem = plainClip;
             (ClipEntry? Entry, bool Paste, bool Plain) chosen = default;
             form.Chosen += (entry, paste, plain) => chosen = (entry, paste, plain);
@@ -215,15 +215,16 @@ internal static class FeatureTests
             Button("Pin").PerformClick();
             check(history.Entries.Single(e => e.Id == plainClip.Id).Pinned && list.SelectedItem is ClipEntry { Pinned: true },
                 "Pin button updates history and preserves selection");
-            Button("Pinned").PerformClick();
+            Button("Favorites").PerformClick();
             check(list.Items.Count == 2 && list.Items.Cast<ClipEntry>().All(e => e.Pinned), "Pinned filter shows only pinned clips");
-            Button("All").PerformClick();
+            Button("Recent").PerformClick();
             list.SelectedItem = history.Entries.Single(e => e.Kind == ClipKind.Files);
             check(!Button("Paste as text").Enabled, "Plain-text action is disabled for file clips");
-            form.ClientSize = new Size(780, 560);
+            form.Size = form.MinimumSize;
             render(form, "features-history-small.png");
             check(Controls(form).OfType<Button>().Where(button => button.Visible).All(button => button.Parent!.ClientRectangle.Contains(button.Bounds)),
                 "History actions fit the minimum window size");
+            check(list.ClientSize.Height >= list.ItemHeight * 3, "Minimum history window keeps at least three visible clip rows at the active DPI");
         }
         var original = new AppSettings(); AppSettings? accepted = null;
         using var settings = new SettingsForm(original, value => { accepted = value; return null; });
@@ -238,11 +239,16 @@ internal static class FeatureTests
         keys.SelectedItem = keys.Items.Cast<object>().Single(key => key.ToString() == "K");
         Controls(settings).OfType<NumericUpDown>().Single(number => number.AccessibleName == "Expire unpinned clips after (days)").Value = 14;
         tabs.SelectedIndex = 2;
+        boxes.Single(box => box.Text == "Remember the source app for new clips").Checked = true;
         Controls(settings).OfType<TextBox>().Single(box => box.AccessibleName == "Excluded applications").Text = "KeePass.exe\r\nKeePassXC.exe";
         render(settings, "settings-privacy.png");
+        tabs.SelectedIndex = 3; render(settings, "settings-about.png");
+        check(tabs.SelectedTab!.Text == "About" && settings.Text.Contains("1.3.0")
+            && Controls(settings).OfType<Button>().Any(button => button.Text == "Check for updates" && button.Enabled),
+            "About shows the installed version and an explicit update check without starting a request");
         Controls(settings).OfType<Button>().Single(button => button.Text == "Save").PerformClick();
         check(accepted is { HotkeyEnabled: true, RetentionDays: 14 } && accepted.Shortcut == new HotkeyGesture(3, 0x4B)
-            && accepted.ExcludedProcesses.Length == 2, "Settings UI saves all configurable 1.2 features together");
+            && accepted.ExcludedProcesses.Length == 2 && accepted.RememberSourceApp, "Settings UI saves history, access and opt-in source metadata together");
         check(!original.HotkeyEnabled && original.RetentionDays == 0 && original.ExcludedProcesses.Length == 0,
             "Editing settings does not mutate the currently active settings before save");
     }

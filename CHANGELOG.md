@@ -1,5 +1,26 @@
 # Changelog
 
+## 1.3.0 — 2026-10-27
+
+- Keep Recent chronological and browse pinned clips separately in Favorites.
+  Search all stored clips before applying the quick picker's visible limit.
+- Add multiword search with exact-match priority and conservative typo matching,
+  plus type, date, source-app, and collection filters in full history.
+- Name clips and organize them into collections without changing their contents.
+  Names, collections, and favorite status survive duplicate capture.
+- Preview and edit text before pasting: clean whitespace, join wrapped lines,
+  change case, convert HTML to Markdown, or remove known URL tracking parameters.
+  The stored original is preserved. Conversions run locally with bounded inputs
+  and output; recognized signed URLs and unknown query parameters are preserved.
+- Optionally remember source executable names for new clips. This is off by
+  default and never records window titles or website addresses.
+- Add Settings > About with the version and an explicit GitHub update check.
+  Checking does not download or install anything automatically.
+- Exclude password fields from the right-click companion, strengthen DPI layout
+  checks, and wait for version-named legacy processes during installation.
+- Create the exact release tag before preparing a draft, avoiding duplicate
+  workflows when the draft is published from GitHub.
+
 ## 1.2.1 — 2026-10-19
 
 - Show the right-click companion only over recognized writable text editors.

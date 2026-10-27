@@ -35,7 +35,17 @@ make the clicked surface eligible and that right-click captures the clicked fiel
 count/byte limits, exact expiration boundaries, duplicate capture age, persisted
 startup/periodic deletion, plain-text formats, shortcut rollback, source exclusions
 before data access, and the settings/history UI actions. Rendered fixtures include
-the three settings tabs and the history window at a smaller size.
+all four settings tabs and the history window at its DPI-scaled minimum size.
+
+`SearchMetadataTests` covers names/collections, old-history migration, metadata
+budgets, duplicate retention, optional source attribution, search ranking and
+bounded typo matching over 1,000 clips near the 48 MiB history limit.
+`HistoryBrowserTests` exercises combined filters, Recent/Favorites separation,
+the search debounce, and modal cancellation in the quick picker.
+`TextTransformTests` covers Unicode, URL query preservation, recognized signed
+URLs, HTML/CF_HTML UTF-8 selection offsets, malformed input, bounded expansion,
+and editable previews. `ReleaseUpdateTests` validates stable release parsing and
+the fixed repository destination without requiring network access.
 
 `scripts/Build.ps1` additionally verifies the exact release file list, EXE
 version, and startup with an isolated `--test-data ... --quit` request. This
@@ -62,6 +72,10 @@ Do not publish private clipboard contents or actual history files.
 | Custom shortcut | Change keys; confirm old keys are released. Try an occupied combination; confirm the old shortcut still works. Disable and restart. |
 | Plain text | Paste formatted Unicode text normally and using the button, Shift+Enter, and Shift+click into an editor and browser. Images/files keep their normal behavior. |
 | Pins | Pin/unpin, filter, recopy, restart, fill recent history, reach pin count/size limits, delete, and clear. |
+| Search and organization | Combine multiword/typo search with date/type/source/collection filters; rename, recopy, restart, and verify Recent/Favorites order. |
+| Transform preview | Inspect and edit each conversion, cancel, and paste into another app; verify the saved original and its formatting survive. |
+| Source metadata | Leave recording off, enable for a sample copy, disable, and verify existing source metadata remains. No titles or URLs should be recorded. |
+| Update discovery | Open Settings > About, verify the version, request a check, and verify GitHub release discovery or a recoverable offline message. |
 | Expiration | Enable an age limit, restart with old synthetic clips, wait for a sweep, and unpin an expired clip. Verify pins survive and expired clips do not return. |
 | Excluded apps | Exclude the clipboard owner and foreground app separately; test a helper process, unknown owner, empty list, and a browser. Existing clips remain. |
 | Multiple displays | Place menus near each screen edge at 100%, 150%, and 200% scaling. |
@@ -112,3 +126,28 @@ desktop automation tool stopped because it could not establish the browser URL.
 Browser interactions therefore remain unverified. No live game was tested;
 the negative surface checks use a Windows Forms drawing panel. The scaled
 placement tests are geometry checks, not a physical multi-monitor/DPI validation.
+
+## 1.3.0 local validation
+
+On 27 October 2026, Windows 11 x64 build **26300.9711**, .NET SDK **10.0.401**,
+and 125% display scaling passed **308 base checks** and **48 interactive checks**.
+The interactive executable was launched in its own visible session after the
+background-launched attempt could not acquire foreground focus. No assertions
+were skipped. It preserved the native menu in three runs, rejected password,
+read-only, disabled and game-like controls, and pasted plain, rich and transformed
+text into a separate Windows process. UI renderings, including minimum-size
+history and transform windows and Settings > About, were visually inspected.
+The release build completed with zero warnings/errors and verified the package
+file allowlist, EXE version, bundled-runtime startup, and SHA-256 checksums.
+
+The dedicated HTML fixture is `tests/fixtures/editor.html`. An isolated synthetic
+history can be prepared with the test executable's `--prepare-manual <empty-dir>`
+and opened with `PasteFromHistory.exe --test-data <empty-dir> --background`.
+These profiles do not read the normal history database; quit the isolated instance
+with the same `--test-data` path and `--quit` when finished.
+
+The browser fixture was prepared, but native browser control stopped because the
+automation tool could not establish the active URL. Current Notepad, browser,
+Office, real-game, fresh-machine-without-.NET, and physical multi-monitor/DPI
+interaction tests were not completed for this release. Prior Notepad validation
+and automated native-control tests do not establish coverage of those versions.

@@ -1,11 +1,14 @@
 using PasteFromHistory.Core;
+using PasteFromHistory.Services;
+using System.Diagnostics;
+using System.Net.Http;
 
 namespace PasteFromHistory.UI;
 
 internal sealed class SettingsForm : Form
 {
     private readonly NumericUpDown menuCount, historyLimit, retentionDays;
-    private readonly CheckBox companion, explorer, hotkey, startup, save, images, files;
+    private readonly CheckBox companion, explorer, hotkey, startup, save, images, files, rememberSource;
     private readonly CheckBox controlKey, altKey, shiftKey;
     private readonly ComboBox shortcutKey;
     private readonly TextBox excluded;
@@ -113,6 +116,9 @@ internal sealed class SettingsForm : Form
         startup = Check(accessPage, "Start when I sign in to Windows", settings.StartWithWindows);
 
         var privacyPage = Page("Privacy");
+        Section(privacyPage, "SOURCE INFORMATION");
+        rememberSource = Check(privacyPage, "Remember the source app for new clips", settings.RememberSourceApp);
+        Help(privacyPage, "Save the clipboard owner's executable name for search and filtering.\nWindow titles and website addresses are not collected. Turning this off\nstops future collection; source names already in history are kept.");
         Section(privacyPage, "EXCLUDED APPLICATIONS");
         Help(privacyPage, "Do not capture from these processes (one executable name per line).\nExamples: KeePass.exe, KeePassXC.exe, 1Password.exe. No paths or wildcards.");
         excluded = new TextBox { Multiline = true, AcceptsReturn = true, ScrollBars = ScrollBars.Vertical,
@@ -122,6 +128,39 @@ internal sealed class SettingsForm : Form
         Help(privacyPage, "Matches the clipboard owner or the active app when a copy is detected.\nWith a non-empty list, unidentified sources are skipped before reading content.");
         Help(privacyPage, "Applies to future copies. Existing history is kept. Excluding a browser\naffects all its sites; browser extensions and helper processes may use other names.");
         Help(privacyPage, "Supported privacy markers are always honored. Exclusions cannot identify\nevery secret. Pause capture from the tray when you need it.");
+
+        var aboutPage = Page("About");
+        Section(aboutPage, "PASTEFROMHISTORY " + Application.ProductVersion.Split('+')[0]);
+        Help(aboutPage, "Local clipboard history for Windows. MIT licensed.\nNo account, telemetry, or background update checks.");
+        Help(aboutPage, "Check for updates contacts GitHub for the latest stable release.\nIt sends no clipboard content, source names, or settings.\nDownloads and installation are started by you.");
+        var update = Theme.Button("Check for updates", () => { });
+        update.Click += async (_, _) =>
+        {
+            update.Enabled = false; update.Text = "Checking…";
+            try
+            {
+                var release = await ReleaseUpdateService.CheckAsync();
+                if (IsDisposed) return;
+                var current = Version.Parse(Application.ProductVersion.Split('+')[0]);
+                if (release.Version > current)
+                {
+                    if (MessageBox.Show(this, $"Version {release.Version} is available. You are using {current}.\n\nOpen its GitHub release page?",
+                        "Update available", MessageBoxButtons.YesNo, MessageBoxIcon.Information) == DialogResult.Yes)
+                        Process.Start(new ProcessStartInfo(release.Url) { UseShellExecute = true });
+                }
+                else MessageBox.Show(this, $"You are using version {current}. No newer stable release is available.",
+                    "Up to date", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException
+                or InvalidDataException or System.ComponentModel.Win32Exception)
+            {
+                if (!IsDisposed) MessageBox.Show(this, "The update check could not be completed. Try again later or visit the project's GitHub Releases page.",
+                    "Update check", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            finally { if (!IsDisposed) { update.Text = "Check for updates"; update.Enabled = true; } }
+        };
+        Add(aboutPage, update);
+        Help(aboutPage, "Release downloads include SHA-256 checksums. Current builds are\nunsigned; checksums do not establish a publisher identity.");
 
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft,
             WrapContents = false, Padding = new Padding(0, 7, 0, 0) };
@@ -146,7 +185,8 @@ internal sealed class SettingsForm : Form
             SaveHistory = save.Checked, CaptureImages = images.Checked, CaptureFiles = files.Checked,
             CompanionMenu = companion.Checked, ExplorerMenu = explorer.Checked,
             HotkeyEnabled = hotkey.Checked, HotkeyModifiers = gesture.Modifiers, HotkeyKey = gesture.Key,
-            ExcludedProcesses = names, StartWithWindows = startup.Checked, SetupComplete = true
+            ExcludedProcesses = names, RememberSourceApp = rememberSource.Checked,
+            StartWithWindows = startup.Checked, SetupComplete = true
         };
         if (apply?.Invoke(candidate) is { } failure) { Invalid(failure); return; }
         Result = candidate;

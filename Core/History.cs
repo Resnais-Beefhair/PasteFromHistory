@@ -7,6 +7,9 @@ public sealed class History
     public const long MaxPixels = 40_000_000;
     public const int MaxPinnedEntries = 50;
     public const long MaxPinnedBytes = 16L * 1024 * 1024;
+    public const int MaxNameLength = 120;
+    public const int MaxCollectionLength = 60;
+    public const int MaxSourceAppLength = 260;
     private readonly List<ClipEntry> entries = [];
     private readonly Dictionary<Guid, string> fingerprints = [];
     public IReadOnlyList<ClipEntry> Entries => entries;
@@ -17,7 +20,14 @@ public sealed class History
         if (!IsValid(entry)) return false;
         var fingerprint = entry.Fingerprint();
         var duplicate = entries.FindIndex(e => fingerprints[e.Id] == fingerprint);
-        if (duplicate >= 0) entry = entry with { Id = entries[duplicate].Id, Pinned = entries[duplicate].Pinned };
+        if (duplicate >= 0)
+        {
+            var original = entries[duplicate];
+            entry = entry with { Id = original.Id, Pinned = original.Pinned, Name = original.Name,
+                Collection = original.Collection, SourceApp = entry.SourceApp.Length == 0 ? original.SourceApp : entry.SourceApp };
+            // Metadata retained from an earlier copy still counts toward admission.
+            if (!IsValid(entry)) return false;
+        }
         if (entry.Pinned && PinLimitError(entry, duplicate >= 0 ? entries[duplicate].Id : null) != null) return false;
         if (!entry.Pinned && IsExpired(entry, retentionDays, now ?? DateTimeOffset.UtcNow)) return false;
         if (entries.Any(e => e.Id == entry.Id) && duplicate < 0) return false;
@@ -81,6 +91,28 @@ public sealed class History
         return null;
     }
 
+    public string? SetMetadata(Guid id, string name, string collection)
+    {
+        var index = entries.FindIndex(entry => entry.Id == id);
+        if (index < 0) return "The clip is no longer in history.";
+        if (name == null || collection == null) return "Enter a name and collection, or leave them empty.";
+        name = name.Trim(); collection = collection.Trim();
+        if (name.Length > MaxNameLength) return $"Names can contain up to {MaxNameLength} characters.";
+        if (collection.Length > MaxCollectionLength) return $"Collections can contain up to {MaxCollectionLength} characters.";
+        if (name.Any(char.IsControl) || collection.Any(char.IsControl)) return "Names and collections must be a single line.";
+        var original = entries[index];
+        if (original.Name == name && original.Collection == collection) return null;
+        var updated = original with { Name = name, Collection = collection };
+        if (!IsValid(updated)) return "The clip and its name exceed the 8 MiB limit. Use a shorter name.";
+        if (updated.Pinned && PinLimitError(updated, id) is { } pinError) return pinError;
+        if (entries.Sum(entry => entry.Size) - original.Size + updated.Size > MaxTotalBytes)
+            return "History has reached its 48 MiB limit. Delete an unneeded clip first.";
+        // Renaming must not promote a clip, change its copy date, or evict another clip.
+        entries[index] = updated;
+        Changed?.Invoke();
+        return null;
+    }
+
     private string? PinLimitError(ClipEntry entry, Guid? except)
     {
         var pinned = entries.Where(e => e.Pinned && e.Id != except).ToArray();
@@ -101,7 +133,11 @@ public sealed class History
 
     public static bool IsValid(ClipEntry? entry)
     {
-        if (entry == null || entry.Text == null || entry.Paths == null || entry.Paths.Any(p => p == null)) return false;
+        if (entry == null || entry.Text == null || entry.Paths == null || entry.Paths.Any(p => p == null)
+            || entry.Name == null || entry.Collection == null || entry.SourceApp == null) return false;
+        if (entry.Name.Length > MaxNameLength || entry.Collection.Length > MaxCollectionLength
+            || entry.SourceApp.Length > MaxSourceAppLength || entry.Name.Any(char.IsControl)
+            || entry.Collection.Any(char.IsControl) || entry.SourceApp.Any(char.IsControl)) return false;
         if (entry.Size > MaxEntryBytes || entry.Id == Guid.Empty) return false;
         return entry.Kind switch
         {

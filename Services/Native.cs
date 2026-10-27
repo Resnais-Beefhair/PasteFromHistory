@@ -25,6 +25,8 @@ internal static class Native
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindow(nint window);
     [DllImport("user32.dll")] [return: MarshalAs(UnmanagedType.Bool)] internal static extern bool IsWindowVisible(nint window);
     [DllImport("user32.dll")] internal static extern nint GetAncestor(nint window, uint flags);
+    [DllImport("user32.dll")] private static extern nint GetWindow(nint window, uint command);
+    [DllImport("user32.dll")] private static extern uint GetDpiForWindow(nint window);
     [DllImport("user32.dll")] internal static extern nint WindowFromPoint(POINT point);
     [DllImport("user32.dll")] internal static extern uint GetWindowThreadProcessId(nint window, out uint processId);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassName(nint window, StringBuilder text, int count);
@@ -89,31 +91,110 @@ internal static class Native
         return FocusedWindow(window) == focus;
     }
     internal static bool IsOwnWindow(nint window) { GetWindowThreadProcessId(window, out var pid); return pid == Environment.ProcessId; }
+    private static bool IsMenuClass(string className) => className is "#32768" or "Xaml_WindowedPopupClass"
+        or "Microsoft.UI.Content.PopupWindowSiteBridge" or "Net UI Tool Window";
+
+    private static bool IsOwnedMenu(nint window, nint target)
+    {
+        if (!IsMenuClass(ClassName(window))) return false;
+        var targetRoot = Root(target);
+        GetWindowThreadProcessId(window, out var windowPid);
+        GetWindowThreadProcessId(target, out var targetPid);
+        if (targetPid == 0 || windowPid != targetPid) return false;
+        var owner = GetWindow(window, 4);
+        for (var depth = 0; owner != 0 && depth < 8; depth++)
+        {
+            if (Root(owner) == targetRoot) return true;
+            // Root-owner equality alone would also admit menus belonging to an
+            // unrelated owned dialog. Only nested recognized menus may intervene.
+            if (!IsMenuClass(ClassName(owner))) return false;
+            GetWindowThreadProcessId(owner, out var ownerPid);
+            if (ownerPid != targetPid) return false;
+            owner = GetWindow(owner, 4);
+        }
+        return false;
+    }
+
+    internal static bool IsTargetForeground(nint target)
+    {
+        if (target == 0 || !IsWindow(target)) return false;
+        var foreground = GetForegroundWindow();
+        // Word activates its owned Net UI context menu. Only a recognized menu
+        // rooted in this exact document window may stand in for the target.
+        // An owned dialog or another document from the same process must not.
+        return Root(foreground) == Root(target) || IsOwnedMenu(foreground, target);
+    }
     internal static bool ModifiersPressed() => new[] { 0x10, 0x11, 0x12, 0x5B, 0x5C }.Any(k => (GetAsyncKeyState(k) & 0x8000) != 0);
     internal static INPUT Key(ushort key, bool up = false) => new() { Type = 1, Data = new() { Keyboard = new() { Key = key, Flags = up ? 2u : 0u } } };
     internal static bool SendPaste() { var inputs = new[] { Key(0x11), Key(0x56), Key(0x56, true), Key(0x11, true) }; return SendInput(4, inputs, Marshal.SizeOf<INPUT>()) == 4; }
     internal static void SendEscape() { var inputs = new[] { Key(VK_ESCAPE), Key(VK_ESCAPE, true) }; SendInput(2, inputs, Marshal.SizeOf<INPUT>()); }
 
-    internal static (nint Handle, Rectangle Bounds)? FindMenu(nint target, Point? click = null)
+    internal static (nint Handle, Rectangle Bounds)? FindMenu(nint target, Point? click = null, Action<string>? trace = null)
     {
         GetWindowThreadProcessId(target, out var targetPid);
         (nint, Rectangle)? result = null;
+        var resultIsWordMenu = false;
+        var wordMenuBounds = new List<Rectangle>();
         long nearestDistance = long.MaxValue;
+        var diagnosticForeground = trace == null ? 0 : GetForegroundWindow();
+        var diagnosticCount = 0;
         EnumWindows((window, _) =>
         {
             if (!IsWindowVisible(window)) return true;
             // Modern Notepad uses a XAML popup, not a classic #32768 menu.
             var className = ClassName(window);
-            if (className is not ("#32768" or "Xaml_WindowedPopupClass" or "Microsoft.UI.Content.PopupWindowSiteBridge")) return true;
+            if (trace != null && diagnosticCount < 12)
+            {
+                GetWindowThreadProcessId(window, out var diagnosticPid);
+                if (diagnosticPid == targetPid || window == diagnosticForeground)
+                {
+                    diagnosticCount++;
+                    var hasBounds = GetWindowRect(window, out var diagnosticBounds);
+                    var owner = GetWindow(window, 4); // GW_OWNER
+                    try
+                    {
+                        // Structural window metadata only, never titles or text.
+                        trace($"menu-window class={className} bounds-valid={hasBounds} bounds={diagnosticBounds.Bounds}"
+                            + $" target-process={diagnosticPid == targetPid} foreground={window == diagnosticForeground}"
+                            + $" root-is-target={Root(window) == Root(target)} owner-class={ClassName(owner)}"
+                            + $" owner-is-target={owner == target} root-owner-is-target={GetAncestor(window, 3) == GetAncestor(target, 3)}");
+                    }
+                    catch (Exception) { /* Optional diagnostics cannot affect menu discovery. */ }
+                }
+            }
+            if (!IsMenuClass(className)) return true;
             GetWindowThreadProcessId(window, out var pid);
             if (pid != targetPid || !GetWindowRect(window, out var rect) || rect.Right <= rect.Left || rect.Bottom <= rect.Top) return true;
-            if (click is not { } point) { result = (window, rect.Bounds); return false; }
+            var isWordMenu = className == "Net UI Tool Window";
+            if (isWordMenu && !IsOwnedMenu(window, target)) return true;
+            if (isWordMenu) wordMenuBounds.Add(rect.Bounds);
+            if (click is not { } point)
+            {
+                if (result == null) { result = (window, rect.Bounds); resultIsWordMenu = isWordMenu; }
+                return resultIsWordMenu;
+            }
             var dx = (long)point.X - Math.Clamp(point.X, rect.Left, rect.Right);
             var dy = (long)point.Y - Math.Clamp(point.Y, rect.Top, rect.Bottom);
             var distance = dx * dx + dy * dy;
-            if (distance < nearestDistance) { nearestDistance = distance; result = (window, rect.Bounds); }
+            if (distance < nearestDistance) { nearestDistance = distance; result = (window, rect.Bounds); resultIsWordMenu = isWordMenu; }
             return true;
         }, 0);
+        if (resultIsWordMenu && result is { } menu)
+        {
+            var gap = Math.Max(8, (int)GetDpiForWindow(target) * 24 / 96);
+            return (menu.Item1, UnionAdjacentMenuBounds(menu.Item2, wordMenuBounds, gap));
+        }
         return result;
+    }
+
+    internal static Rectangle UnionAdjacentMenuBounds(Rectangle menu, IEnumerable<Rectangle> siblings, int gap)
+    {
+        // The Word mini toolbar is a second owned popup separated by a small
+        // gap. Reserve its space too, but never chain through distant toolbars.
+        var nearby = Rectangle.Inflate(menu, Math.Max(0, gap), Math.Max(0, gap));
+        var bounds = menu;
+        foreach (var sibling in siblings)
+            if (nearby.IntersectsWith(sibling)) bounds = Rectangle.Union(bounds, sibling);
+        return bounds;
     }
 }

@@ -24,12 +24,21 @@ clipboard listener. They temporarily activate test windows and replace the curre
 clipboard with synthetic text; they do not read or restore its previous contents.
 CI runs the base suite; the interactive suite requires a manual desktop session.
 
+The owned-menu regression creates actual native `Net UI Tool Window` fixtures.
+It checks document ownership, closest-menu discovery, adjacent mini-toolbar
+bounds, foreground preservation and disappearance, and rejects both an unrelated
+owned dialog and a recognized menu owned by that dialog. It does not substitute
+for testing Word itself.
+
 `EditorTargetTests` checks fail-closed metadata, unavailable providers, bounded
 timeouts/concurrency, and placement at 100/150/200% sizes on positive and negative
 monitor coordinates. Its interactive checks use real writable, read-only and
 disabled native text controls, a rich-text document, buttons, static labels and
 a game-like drawing panel. They verify that a focused editor elsewhere does not
 make the clicked surface eligible and that right-click captures the clicked field.
+The base suite also checks Word menu/mini-toolbar placement geometry and that
+diagnostic failures neither suppress a valid editor nor log provider exception
+messages that might contain private text.
 
 `FeatureTests` covers old settings/history compatibility, pin identity and storage,
 count/byte limits, exact expiration boundaries, duplicate capture age, persisted
@@ -65,6 +74,7 @@ Do not publish private clipboard contents or actual history files.
 | Fresh system | Extract the release on Windows x64 without .NET installed; start and quit. |
 | Installation and upgrade | Install without elevation, verify Start menu shortcut; update with history present and confirm it survives. |
 | Notepad | Open right-click menu; keep it open for several seconds; select history and paste into the original field. |
+| Word | Right-click document text, preserve its context menu and mini toolbar, and paste Unicode into the original caret. Check the title/tab strip does not offer history. |
 | Browser text field | Repeat in a browser input and a multiline field; verify the original menu still works. |
 | Editor-only companion | Right-click writable input, textarea, contenteditable, read-only/disabled fields, page text, toolbar buttons, and a game/canvas surface. Only recognized writable fields should show the companion, even if another editor owns focus. |
 | Explorer and desktop | Paste text, image, and copied files; check filename conflicts and cancellation. |
@@ -151,3 +161,34 @@ automation tool could not establish the active URL. Current Notepad, browser,
 Office, real-game, fresh-machine-without-.NET, and physical multi-monitor/DPI
 interaction tests were not completed for this release. Prior Notepad validation
 and automated native-control tests do not establish coverage of those versions.
+
+## 1.3.1 compatibility validation
+
+On 27 October 2026, the development build passed **312 base checks** and **54
+interactive native-window checks**. The interactive suite includes owned Word-style
+menus, adjacent toolbar placement, read-only/password/disabled controls, and paste
+into a separate process. An initial run lost test-window focus during concurrent
+desktop interaction; the uninterrupted rerun passed all 54 checks.
+
+Live checks used an isolated `--test-data` profile with invented clips and
+separate test documents. The normal history database was not used. Test mode
+exposes transient companion/picker windows on the taskbar for desktop tooling;
+the companion retains its no-activate behavior.
+
+| Application | Observed result |
+| --- | --- |
+| Notepad **11.2607.14.0** | Ordinary right-click kept the native menu open. Selecting the saved Team appointment clip pasted `Blue calendar meeting` at the original caret. |
+| Word **16.0.20527.20088** | Ordinary right-click kept the context menu and mini toolbar open. The companion appeared immediately to their left with a 7-pixel gap, covering neither popup. Choosing the validation clip pasted `PasteFromHistory 1.3 validation — ä € 🙂` at the original caret. |
+| Word title/tab strip | The UIA Tab surface was rejected and no companion appeared. |
+| Chrome **156.0.8078.48** | Not completed: the browser tool's saved origin permission blocked the local fixture. Native right-click and history-paste behavior remains unverified in this Chrome version. |
+
+The Word failure had two independently observed causes. Its writable Edit child
+reports `IsKeyboardFocusable=false` because focus belongs to the containing
+Document; explicit writable text metadata now determines eligibility. Its context
+menu becomes the foreground `Net UI Tool Window`, so comparing only top-level
+window identity rejected the otherwise valid request. Recognition is now limited
+to same-process menus whose ownership reaches the original document, and placement
+accounts for the adjacent mini toolbar.
+
+These results cover the specified Notepad and Word interactions, not all Office
+applications, browsers, protected documents, or physical multi-monitor/DPI setups.

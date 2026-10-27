@@ -89,9 +89,10 @@ prevent queued messages from the previous binding opening a popup after a change
 `MouseObserver` uses a low-level mouse hook to observe ordinary right-clicks and
 record the original target and focused control before a menu can move focus.
 The hook passes events on. On mouse-down, `EditableTargetProbe` checks the clicked
-UI Automation element on an MTA worker. Only enabled, focusable Edit/Document
-controls with explicit writable metadata qualify; read-only and password flags
-veto the result.
+UI Automation element on an MTA worker. Only enabled Edit/Document controls with
+explicit writable metadata qualify; read-only and password flags veto the result.
+A writable child may delegate keyboard focus to its containing document, as Word
+does, so keyboard focusability alone does not determine editability.
 Text runs may be walked up to their editor, but buttons and other controls may not.
 The probe never reads text/value contents, never falls back to a different focused
 field, and allows at most one provider call in flight. A 600 ms deadline fails
@@ -102,10 +103,21 @@ A timer waits for the native menu to open and for a successful probe before show
 observed menu, or changed foreground invalidates the request. No UI Automation
 objects cross threads. See Microsoft's [UI Automation threading guidance](https://learn.microsoft.com/en-us/windows/win32/winauto/uiauto-threading).
 
+Word activates an owned `Net UI Tool Window` while its context menu is open.
+`Native.IsTargetForeground` accepts the original target or a recognized menu in
+the same process whose ownership leads to that exact document window. Only
+recognized nested menus may intervene in the ownership chain; an ordinary owned
+dialog, its menu, or another document cannot substitute for the target. This
+relationship is used while offering, displaying, and opening the companion.
+
 The companion is a separate no-activate window. Native extended styles keep it
 above the menu without WinForms' managed `TopMost` visibility path activating
 it. Do not replace this with `Form.TopMost = true`: that previously closed
-Notepad's menu. `Native.FindMenu` recognizes Win32 and relevant XAML popup classes;
+Notepad's menu. `Native.FindMenu` recognizes Win32, relevant XAML popup classes,
+and Word's owned `Net UI Tool Window` menus. It tracks the closest menu handle
+but reserves the combined bounds of that Word menu and nearby owned mini toolbar.
+The adjacency gap scales with DPI; distant tool windows are excluded and the
+search does not chain through additional toolbar rectangles.
 `CompanionPlacement` chooses a nearby position that avoids a recognized menu and
 clamps to the current monitor's work area. Unknown menus use a small gap above the
 click instead of a fixed horizontal offset. The hidden window first moves to the
@@ -114,7 +126,9 @@ target monitor so its current DPI is applied before placement.
 Choosing a clip closes the picker, restores the original application's focus,
 writes the formats to the clipboard, and uses `SendInput` for Ctrl+V. Focus
 restoration validates the window/control relationship and only temporarily
-attaches input threads. Clipboard contents remain available for manual paste if
+attaches input threads. Actual pasting still requires the original editor window
+to be foreground after menu dismissal; the owned-menu exception is not used for
+`PasteService` focus restoration. Clipboard contents remain available for manual paste if
 automatic paste is blocked. Folder targets instead create text/image files or
 invoke Windows file copy operations.
 
@@ -136,6 +150,12 @@ the active instance, including `--quit` for orderly shutdown before updates.
 `--test-data <absolute path>` gives development instances their own history,
 settings, and instance scope. It skips persistent Explorer/startup integration,
 but still observes live clipboard and mouse events. Test profiles are private.
+This mode also enables best-effort diagnostics for structural UI Automation and
+window metadata, rejection reasons, and probe timing. It never queries field
+contents, UIA names/values, or window titles for diagnostics. Menu discovery logs
+at most 12 relevant visible window records per call. Diagnostic writes are
+serialized, and logging failures do not interrupt input. Production instances
+do not enable this callback or perform its additional metadata queries.
 
 The public name is PasteFromHistory. `Core/Compatibility.cs` deliberately retains
 the original local build's storage directory, DPAPI entropy, clipboard marker,

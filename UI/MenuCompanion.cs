@@ -85,7 +85,7 @@ internal sealed class MenuCompanion : Form
         // Accessibility tools can explicitly activate a no-activate window. Do
         // not remove the button between that activation and its click.
         var companionActive = foreground == Handle;
-        if (!Native.IsWindow(target) || (!companionActive && foreground != Native.Root(target))
+        if (!Native.IsWindow(target) || (!companionActive && !Native.IsTargetForeground(target))
             || (Native.GetAsyncKeyState(Native.VK_ESCAPE) & 0x8000) != 0
             || (nativeMenu == 0 && (DateTime.UtcNow - shownAt).TotalSeconds > 60)
             || (!companionActive && nativeMenu != 0 && !Native.IsWindowVisible(nativeMenu)))
